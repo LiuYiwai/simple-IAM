@@ -16,7 +16,7 @@ If you have any good suggestions, please let me know. Thank you !
 ### Reference
 ```markdown
 @article{Zhu2019IAM,
-		title={{Learning Instance Activation Maps for Weakly Supervised Instance Segmentation}},
+    title={{Learning Instance Activation Maps for Weakly Supervised Instance Segmentation}},
     author = {Zhu, Y. and Zhou, Y. and Xu, H. and Ye, Q. and Doermann, D. and Jiao, J.},
     booktitle = {CVPR},
     year = {2019}
