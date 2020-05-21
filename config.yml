@@ -1,0 +1,85 @@
+class_num: 20
+
+image_size: 448 # 448 x 448
+
+class_names: ['aeroplane', 'bicycle', 'bird', 'boat',
+              'bottle', 'bus', 'car', 'cat', 'chair',
+              'cow', 'diningtable', 'dog', 'horse',
+              'motorbike', 'person', 'pottedplant',
+              'sheep', 'sofa', 'train', 'tvmonitor']
+
+train_dataset:
+  #  split: train
+  #  data_dir: ./datasets/VOCdevkit/VOC2012
+  split: test
+  data_dir: ./datasets/TestDemo
+
+test_dataset:
+  split: test
+  data_dir: ./datasets/TestDemo
+
+train_transform:
+  #  augmentation:
+  #    horizontal_flip: 0.5
+  image_size: [448, 448]
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+
+test_transform:
+  image_size: [448, 448]
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+
+data_loaders:
+  #  batch_size: 1
+  batch_size: 2
+  #  batch_size: 4
+  #  batch_size: 32
+  num_workers: 4
+
+test_data_loaders:
+  #  batch_size: 1
+  batch_size: 2
+  num_workers: 4
+
+model:
+  win_size: 3
+  sub_pixel_locating_factor: 8
+  enable_peak_stimulation: true
+
+optimizer:
+  #  lr: 0.01
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 1.0e-4
+
+finetune:
+  #  base_lr: 0.01
+  base_lr: 0.1
+  groups:
+    #    'features': 0.01
+    'features': 0.1
+
+meters:
+  loss:
+    _name: loss_meter
+
+
+# filling iterate
+iterate_num: 8
+
+encode_pooling: [2,2]
+
+k_proposals: 5
+
+balance_factor: 1.5
+
+#max_epoch: 1
+max_epoch: 4
+#max_epoch: 10
+#max_epoch: 20
+#max_epoch: 50
+
+log: ./
+
+snapshot: ./snapshots
