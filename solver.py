@@ -97,9 +97,9 @@ class Solver(object):
         # shutil.copyfile(name, '%s_latest.pth.tar' % prefix_save)
         torch.save(state, '%s_latest.pth.tar' % prefix_save)
 
-    def instance_nms(self, instance_list, threshold=0.2, merge_peak_response=True):
+        def instance_nms(self, instance_list, threshold=0.2, merge_peak_response=True):
         selected_instances = []
-        while len(instance_list) > 0:
+        if len(instance_list) > 0:
             instance = instance_list.pop(0)
             selected_instances.append(instance)
             src_mask = instance[2].astype(bool)
@@ -111,7 +111,7 @@ class Solver(object):
                 intersection = np.logical_and(src_mask, dst_mask).sum()
                 union = np.logical_or(src_mask, dst_mask).sum()
                 iou = intersection / (union + 1e-10)
-                if iou < threshold:
+                if iou > threshold:
                     return x
                 else:
                     if merge_peak_response:
@@ -120,8 +120,9 @@ class Solver(object):
                     return None
 
             instance_list = list(filter(iou_filter, instance_list))
+            selected_instances.extend(instance_list)
         return selected_instances
-
+    
     def pseudo_gt_sampling(self, peak_list, peak_response_maps, retrieval_cfg):
         # cast tensors to numpy array
         peak_list = peak_list.cpu().numpy()
