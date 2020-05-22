@@ -97,13 +97,14 @@ class Solver(object):
         # shutil.copyfile(name, '%s_latest.pth.tar' % prefix_save)
         torch.save(state, '%s_latest.pth.tar' % prefix_save)
 
-        def instance_nms(self, instance_list, threshold=0.2, merge_peak_response=True):
+    def instance_nms(self, instance_list, threshold=0.2, merge_peak_response=True):
         selected_instances = []
         if len(instance_list) > 0:
             instance = instance_list.pop(0)
             selected_instances.append(instance)
             src_mask = instance[2].astype(bool)
-            src_peak_response = instance[3]
+
+            # src_peak_response = instance[3]
 
             def iou_filter(x):
                 dst_mask = x[2].astype(bool)
@@ -114,9 +115,9 @@ class Solver(object):
                 if iou > threshold:
                     return x
                 else:
-                    if merge_peak_response:
-                        nonlocal src_peak_response
-                        src_peak_response += x[3]
+                    # if merge_peak_response:
+                    #     nonlocal src_peak_response
+                    #     src_peak_response += x[3]
                     return None
 
             instance_list = list(filter(iou_filter, instance_list))
@@ -267,15 +268,19 @@ class Solver(object):
 
         peak_response_maps_list = []
         peak_list_list = []
+        feature_maps_list = []
 
         for epoch in range(self.max_epoch):
             average_loss = 0.
             for iteration, (inp, proposals) in enumerate(train_data_loader):
 
+                since2 = time.time()
+
                 inp = inp.to(self.device)
 
                 peak_response_maps_list.clear()
                 peak_list_list.clear()
+                feature_maps_list.clear()
                 for idx in range(inp.size(0)):
                     item = inp[idx].unsqueeze(0)
                     return_tuple = self.prm_module(item)
@@ -289,6 +294,7 @@ class Solver(object):
                         peak_list[:, 0] = idx
                         peak_response_maps_list.append(peak_response_maps)
                         peak_list_list.append(peak_list)
+                        feature_maps_list.append(feature_maps)
 
                 if len(peak_response_maps_list) == 0:
                     print('trainning pass epoch %d iteration %d' % (epoch + 1, iteration))
@@ -296,6 +302,7 @@ class Solver(object):
 
                 peak_response_maps = torch.cat(peak_response_maps_list)
                 peak_list = torch.cat(peak_list_list)
+                feature_maps = torch.cat(feature_maps_list)
 
                 retrieval_cfg = dict(proposals=proposals, param=(self.balance_factor,))
                 pseudo_gt_mask = self.pseudo_gt_sampling(peak_list, peak_response_maps, retrieval_cfg)
