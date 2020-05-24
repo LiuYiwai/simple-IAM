@@ -76,7 +76,7 @@ class PeakResponseMapping(nn.Sequential):
         self.inferencing = True
         return self
 
-    def forward(self, _input, class_threshold=-2, peak_threshold=30):
+    def forward(self, _input, class_threshold=0, peak_threshold=30):
 
         assert _input.dim() == 4, 'PeakResponseMapping layer only supports batch mode.'
 

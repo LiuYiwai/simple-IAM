@@ -119,7 +119,8 @@ def get_dataloader(dataset: Callable[[str], Dataset],
                    num_workers: int = 0,
                    pin_memory: bool = True,
                    drop_last: bool = False,
-                   train_shuffle: bool = True,
+                   # train_shuffle: bool = True,
+                   train_shuffle: bool = False,
                    test_shuffle: bool = False,
                    train_augmentation: dict = {},
                    test_augmentation: dict = {},
@@ -241,7 +242,7 @@ class TrainFillingDataset(TrainDataset):
                 random.seed(seed)
                 torch.manual_seed(seed)
                 torch.cuda.manual_seed_all(seed)
-                proposals[idx] = self.target_transform(Image.fromarray(proposals[idx]))
+                proposals[idx] = self.target_transform(Image.fromarray(proposals[idx] * 255))
             proposals = torch.cat(proposals)
 
         return img, proposals

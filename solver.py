@@ -268,8 +268,6 @@ class Solver(object):
             average_loss = 0.
             for iteration, (inp, proposals) in enumerate(train_data_loader):
 
-                since2 = time.time()
-
                 inp = inp.to(self.device)
 
                 peak_response_maps_list.clear()
