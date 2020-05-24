@@ -275,7 +275,7 @@ class TestDataset(Dataset):
         self.transform = transform
         self.img_name = self._read_img_name(split)
         self.to_tensor = transforms.Compose([
-            transforms.Resize((image_size, image_size)),
+            transforms.Resize(tuple(image_size)),
             transforms.ToTensor(),
         ])
 
