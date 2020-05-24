@@ -33,7 +33,11 @@ def main(args):
         print('train prm over')
 
     if args.train_filling:
-        config['train_dataset'].update({'train_type': 'filling'})
+        proposals_trans = proposals_transform(**config['train_transform'])
+        config['train_dataset'].update({
+            'train_type': 'filling',
+            'target_transform': proposals_trans,
+        })
         dataset = train_dataset(**config['train_dataset'])
         config['data_loaders']['dataset'] = dataset
         data_loader = get_dataloader(**config['data_loaders'])
@@ -43,7 +47,8 @@ def main(args):
 
     if args.run_demo:
         test_trans = image_transform(**config['test_transform'])
-        config['test_dataset'].update({'transform': test_trans})
+        config['test_dataset'].update({'image_size': config['test_transform']['image_size'],
+                                       'transform': test_trans})
         dataset = test_dataset(**config['test_dataset'])
         config['test_data_loaders']['dataset'] = dataset
         data_loader = get_dataloader(**config['test_data_loaders'])
@@ -56,6 +61,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_filling', type=bool, default=False, help='set train filling mode up')
     parser.add_argument('--train_prm', type=bool, default=False, help='set train prm mode up')
-    parser.add_argument('--run_demo', '-I', type=bool, default=True, help='run demo')
+    parser.add_argument('--run_demo', '-I', type=bool, default=False, help='run demo')
     args = parser.parse_args()
     main(args)

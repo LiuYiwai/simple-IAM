@@ -67,8 +67,8 @@ def peak_response_mapping(
 def instance_extent_filling(backbone, config):
     feature_map_channel = backbone.get_feature_map_channel()
 
-    model = InstanceExtentFilling(channel_num=16,
-                                  kernel=3,
+    model = InstanceExtentFilling(channel_num=config['encode_channel'],
+                                  kernel=config['filling_kernel'],
                                   iterate_num=config['iterate_num'],
                                   pool_multiple=config['encode_pooling'],
                                   image_size=config['image_size'],

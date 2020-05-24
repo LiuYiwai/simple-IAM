@@ -15,7 +15,7 @@ from model import fc_resnet50
 from model import finetune
 from model import instance_extent_filling
 from model import peak_response_mapping
-from optims import *
+from optims import sgd_optimizer
 
 
 class Solver(object):
@@ -45,8 +45,11 @@ class Solver(object):
 
         self.params = finetune(self.prm_module, **config['finetune'])
         self.optimizer_prm = sgd_optimizer(self.params, **config['optimizer'])
+
         self.params = finetune(self.filling_module, **config['finetune'])
         self.optimizer_filling = sgd_optimizer(self.params, **config['optimizer'])
+        # self.optimizer_filling = torch.optim.RMSprop(self.filling_module.parameters())
+        # self.optimizer_filling = torch.optim.Adadelta(self.filling_module.parameters())
 
         self.lr_update_step = 999999
         self.lr = config['optimizer']['lr']
@@ -97,13 +100,12 @@ class Solver(object):
         # shutil.copyfile(name, '%s_latest.pth.tar' % prefix_save)
         torch.save(state, '%s_latest.pth.tar' % prefix_save)
 
-    def instance_nms(self, instance_list, threshold=0.2, merge_peak_response=True):
+    def discard_proposals(self, instance_list, threshold=0.2):
         selected_instances = []
-        while len(instance_list) > 0:
+        if len(instance_list) > 0:
             instance = instance_list.pop(0)
             selected_instances.append(instance)
             src_mask = instance[2].astype(bool)
-            src_peak_response = instance[3]
 
             def iou_filter(x):
                 dst_mask = x[2].astype(bool)
@@ -111,15 +113,13 @@ class Solver(object):
                 intersection = np.logical_and(src_mask, dst_mask).sum()
                 union = np.logical_or(src_mask, dst_mask).sum()
                 iou = intersection / (union + 1e-10)
-                if iou < threshold:
+                if iou > threshold:
                     return x
                 else:
-                    if merge_peak_response:
-                        nonlocal src_peak_response
-                        src_peak_response += x[3]
                     return None
 
             instance_list = list(filter(iou_filter, instance_list))
+            selected_instances.extend(instance_list)
         return selected_instances
 
     def pseudo_gt_sampling(self, peak_list, peak_response_maps, retrieval_cfg):
@@ -146,10 +146,6 @@ class Solver(object):
 
         # nms threshold
         nms_threshold = retrieval_cfg.get('nms_threshold', 0.2)
-
-        # merge peak response during nms
-        merge_peak_response = retrieval_cfg.get('merge_peak_response', True)
-        # merge_peak_response = retrieval_cfg.get('merge_peak_response', False)
 
         # metric free parameters
         param = retrieval_cfg.get('param', None)
@@ -201,9 +197,8 @@ class Solver(object):
             proposal_val_list = proposal_val_list[0:candidates_num]
 
             if nms_threshold is not None:
-                proposal_val_list = self.instance_nms(proposal_val_list,
-                                                      nms_threshold,
-                                                      merge_peak_response)
+                proposal_val_list = self.discard_proposals(proposal_val_list,
+                                                           nms_threshold)
 
             choice_index = np.random.choice(len(proposal_val_list), 1)[0]
 
@@ -212,6 +207,7 @@ class Solver(object):
         return pseudo_gt_mask
 
     def train_prm(self, train_data_loader, train_logger, val_data_loader=None, val_logger=None):
+        # self.restore_prm_model()
         # Start training.
         print('Start training prm...')
         since = time.time()
@@ -266,6 +262,7 @@ class Solver(object):
 
         peak_response_maps_list = []
         peak_list_list = []
+        feature_maps_list = []
 
         for epoch in range(self.max_epoch):
             average_loss = 0.
@@ -275,6 +272,7 @@ class Solver(object):
 
                 peak_response_maps_list.clear()
                 peak_list_list.clear()
+                feature_maps_list.clear()
                 for idx in range(inp.size(0)):
                     item = inp[idx].unsqueeze(0)
                     return_tuple = self.prm_module(item)
@@ -288,6 +286,7 @@ class Solver(object):
                         peak_list[:, 0] = idx
                         peak_response_maps_list.append(peak_response_maps)
                         peak_list_list.append(peak_list)
+                        feature_maps_list.append(feature_maps)
 
                 if len(peak_response_maps_list) == 0:
                     print('trainning pass epoch %d iteration %d' % (epoch + 1, iteration))
@@ -295,6 +294,7 @@ class Solver(object):
 
                 peak_response_maps = torch.cat(peak_response_maps_list)
                 peak_list = torch.cat(peak_list_list)
+                feature_maps = torch.cat(feature_maps_list)
 
                 retrieval_cfg = dict(proposals=proposals, param=(self.balance_factor,))
                 pseudo_gt_mask = self.pseudo_gt_sampling(peak_list, peak_response_maps, retrieval_cfg)
@@ -303,8 +303,6 @@ class Solver(object):
                 peak_response_maps = peak_response_maps.to(self.device)
                 feature_maps = feature_maps.to(self.device)
                 pseudo_gt_mask = pseudo_gt_mask.to(self.device)
-
-                since = time.time()
 
                 _output = self.filling_module(peak_response_maps, peak_list, feature_maps)
 
@@ -318,13 +316,17 @@ class Solver(object):
                 loss.backward()
                 self.optimizer_filling.step()
 
-                time_elapsed = time.time() - since
-                print('completed in %.0fm %.0fs' % (time_elapsed // 60, time_elapsed % 60))
-
                 #################### LOGGING #############################
                 lr = self.optimizer_filling.param_groups[0]['lr']
                 train_logger.add_scalar('lr', lr, epoch)
                 train_logger.add_scalar('loss', loss, epoch)
+
+                self.save_checkpoint({'arch': 'iam',
+                                      'lr': self.lr,
+                                      'epoch': epoch,
+                                      'state_dict': self.filling_module.state_dict(),
+                                      'error': average_loss},
+                                     self.snapshot, 'model_filling', epoch, 'checkpoint_filling.pth.tar')
 
             self.save_checkpoint({'arch': 'iam',
                                   'lr': self.lr,
@@ -366,7 +368,6 @@ class Solver(object):
         d.addPairwiseGaussian(sxy=3, compat=3)
         d.addPairwiseBilateral(sxy=80, srgb=13, rgbim=img, compat=10)
 
-        # Q = d.inference(5)
         Q = d.inference(3)
         Q = np.argmax(np.array(Q), axis=0).reshape((h, w))
 
@@ -377,9 +378,9 @@ class Solver(object):
         self.restore_filling_model()
 
         # Visual cue extraction
-        self.filling_module.eval()
+        # self.filling_module.eval()
         # TODO
-        # self.filling_module.train()
+        self.filling_module.train()
 
         peak_response_maps_list = []
         peak_list_list = []

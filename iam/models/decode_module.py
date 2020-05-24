@@ -42,4 +42,5 @@ class DecodeModule(nn.Module):
         upsampling_size = [item * self.pool_multiple[-2] for item in upsampling_size]
         x = F.interpolate(x, size=upsampling_size, mode='bilinear', align_corners=True)
         x = self.decode3(x)
+
         return x

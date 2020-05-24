@@ -1,5 +1,6 @@
 import json
 import os
+import random
 from abc import abstractmethod, ABCMeta
 from collections import OrderedDict
 from typing import Callable
@@ -26,24 +27,30 @@ def image_transform(
     else:
         image_size = tuple(image_size)
 
+    cnt = 0
+
     # data augmentations
-    horizontal_flip = augmentation.pop('horizontal_flip', None)
+    horizontal_flip = augmentation.get('horizontal_flip', None)
     if horizontal_flip is not None:
         assert isinstance(horizontal_flip, float) and 0 <= horizontal_flip <= 1
+        cnt += 1
 
-    vertical_flip = augmentation.pop('vertical_flip', None)
+    vertical_flip = augmentation.get('vertical_flip', None)
     if vertical_flip is not None:
         assert isinstance(vertical_flip, float) and 0 <= vertical_flip <= 1
+        cnt += 1
 
-    random_crop = augmentation.pop('random_crop', None)
+    random_crop = augmentation.get('random_crop', None)
     if random_crop is not None:
         assert isinstance(random_crop, dict)
+        cnt += 1
 
-    center_crop = augmentation.pop('center_crop', None)
+    center_crop = augmentation.get('center_crop', None)
     if center_crop is not None:
         assert isinstance(center_crop, (int, list))
+        cnt += 1
 
-    if len(augmentation) > 0:
+    if len(augmentation) > cnt:
         raise NotImplementedError('Invalid augmentation options: %s.' % ', '.join(augmentation.keys()))
 
     t = [
@@ -58,12 +65,61 @@ def image_transform(
     return transforms.Compose([v for v in t if v is not None])
 
 
+def proposals_transform(
+        image_size: Union[int, List[int]],
+        augmentation: dict = {},
+        mean: List[float] = [0.485, 0.456, 0.406],
+        std: List[float] = [0.229, 0.224, 0.225]) -> Callable:
+    """proposals transforms.
+    """
+
+    if isinstance(image_size, int):
+        image_size = (image_size, image_size)
+    else:
+        image_size = tuple(image_size)
+
+    cnt = 0
+
+    # data augmentations
+    horizontal_flip = augmentation.get('horizontal_flip', None)
+    if horizontal_flip is not None:
+        assert isinstance(horizontal_flip, float) and 0 <= horizontal_flip <= 1
+        cnt += 1
+
+    vertical_flip = augmentation.get('vertical_flip', None)
+    if vertical_flip is not None:
+        assert isinstance(vertical_flip, float) and 0 <= vertical_flip <= 1
+        cnt += 1
+
+    random_crop = augmentation.get('random_crop', None)
+    if random_crop is not None:
+        assert isinstance(random_crop, dict)
+        cnt += 1
+
+    center_crop = augmentation.get('center_crop', None)
+    if center_crop is not None:
+        assert isinstance(center_crop, (int, list))
+        cnt += 1
+
+    if len(augmentation) > cnt:
+        raise NotImplementedError('Invalid augmentation options: %s.' % ', '.join(augmentation.keys()))
+
+    t = [
+        transforms.Resize(image_size) if random_crop is None else transforms.RandomResizedCrop(image_size[0],
+                                                                                               **random_crop),
+        transforms.CenterCrop(center_crop) if center_crop is not None else None,
+        transforms.RandomHorizontalFlip(horizontal_flip) if horizontal_flip is not None else None,
+        transforms.RandomVerticalFlip(vertical_flip) if vertical_flip is not None else None,
+        transforms.ToTensor()]
+
+    return transforms.Compose([v for v in t if v is not None])
+
+
 def get_dataloader(dataset: Callable[[str], Dataset],
                    num_workers: int = 0,
                    pin_memory: bool = True,
                    drop_last: bool = False,
                    # train_shuffle: bool = True,
-                   # TODO
                    train_shuffle: bool = False,
                    test_shuffle: bool = False,
                    train_augmentation: dict = {},
@@ -97,19 +153,6 @@ class TrainDataset(Dataset):
         self.target_transform = target_transform
         self.classes = classes
         self.image_labels = self._read_annotations(self.split)
-
-        # self.data_dir = data_dir
-        #         self.split = split
-        #         self.image_dir = os.path.join(data_dir, 'JPEGImages')
-        #         assert os.path.isdir(self.image_dir), 'Could not find image folder "%s".' % self.image_dir
-        #         self.gt_path = os.path.join(self.data_dir, 'ImageSets', 'Main')
-        #         assert os.path.isdir(self.gt_path), 'Could not find ground truth folder "%s".' % self.gt_path
-        #         self.proposal_path = os.path.join(self.data_dir, 'ImageProposals')
-        #         assert os.path.isdir(self.gt_path), 'Could not find image proposal folder "%s".' % self.proposal_path
-        #         self.transform = transform
-        #         self.target_transform = target_transform
-        #         self.classes = classes
-        #         self.image_labels = self._read_annotations(self.split)
 
         @abstractmethod
         def _read_annotation():
@@ -188,9 +231,20 @@ class TrainFillingDataset(TrainDataset):
         img = Image.open(img_filename).convert('RGB')
         with open(proposal_filename, 'r') as f:
             proposals = list(map(rle_decode, json.load(f)))
-            proposals = torch.Tensor(proposals)
-        if self.transform:
+
+        if self.transform is not None:
+            seed = np.random.randint(2147483647)  # make a seed with numpy generator
+            random.seed(seed)
+            torch.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
             img = self.transform(img)
+            for idx in range(len(proposals)):
+                random.seed(seed)
+                torch.manual_seed(seed)
+                torch.cuda.manual_seed_all(seed)
+                proposals[idx] = self.target_transform(Image.fromarray(proposals[idx]))
+            proposals = torch.cat(proposals)
+
         return img, proposals
 
     def __len__(self):
@@ -213,7 +267,7 @@ def train_dataset(
 
 class TestDataset(Dataset):
 
-    def __init__(self, data_dir, split, transform=None):
+    def __init__(self, data_dir, split, image_size, transform=None):
         self.data_dir = data_dir
         self.split = split
         self.image_dir = os.path.join(data_dir, 'JPEGImages')
@@ -221,6 +275,7 @@ class TestDataset(Dataset):
         self.transform = transform
         self.img_name = self._read_img_name(split)
         self.to_tensor = transforms.Compose([
+            transforms.Resize((image_size, image_size)),
             transforms.ToTensor(),
         ])
 
@@ -252,5 +307,6 @@ class TestDataset(Dataset):
 def test_dataset(
         split: str,
         data_dir: str,
+        image_size: int,
         transform: Optional[Callable] = None) -> Dataset:
-    return TestDataset(data_dir, split, transform)
+    return TestDataset(data_dir, split, image_size, transform)

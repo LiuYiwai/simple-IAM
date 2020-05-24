@@ -9,18 +9,18 @@ class_names: ['aeroplane', 'bicycle', 'bird', 'boat',
               'sheep', 'sofa', 'train', 'tvmonitor']
 
 train_dataset:
-  #  split: train
-  #  data_dir: ./datasets/VOCdevkit/VOC2012
-  split: test
-  data_dir: ./datasets/TestDemo
+  split: train
+  data_dir: ./datasets/VOCdevkit/VOC2012
+#  split: trainval
+#  data_dir: ./datasets/TestDemo
 
 test_dataset:
   split: test
   data_dir: ./datasets/TestDemo
 
 train_transform:
-  #  augmentation:
-  #    horizontal_flip: 0.5
+  augmentation:
+    horizontal_flip: 0.5
   image_size: [448, 448]
   mean: [0.485, 0.456, 0.406]
   std: [0.229, 0.224, 0.225]
@@ -31,15 +31,16 @@ test_transform:
   std: [0.229, 0.224, 0.225]
 
 data_loaders:
-  #  batch_size: 1
-  batch_size: 2
-  #  batch_size: 4
+  batch_size: 1
+  #  batch_size: 2
+  #  batch_size: 8
+  #  batch_size: 16
   #  batch_size: 32
-  num_workers: 4
+  #  num_workers: 4
+  num_workers: 1
 
 test_data_loaders:
-  #  batch_size: 1
-  batch_size: 2
+  batch_size: 1
   num_workers: 4
 
 model:
@@ -48,17 +49,14 @@ model:
   enable_peak_stimulation: true
 
 optimizer:
-  #  lr: 0.01
-  lr: 0.1
+  lr: 0.001
   momentum: 0.9
   weight_decay: 1.0e-4
 
 finetune:
-  #  base_lr: 0.01
-  base_lr: 0.1
+  base_lr: 0.01
   groups:
-    #    'features': 0.01
-    'features': 0.1
+    'features': 0.01
 
 meters:
   loss:
@@ -70,15 +68,15 @@ iterate_num: 8
 
 encode_pooling: [2,2]
 
+encode_channel: 8
+
+filling_kernel: 3
+
 k_proposals: 5
 
-balance_factor: 1.5
+balance_factor: 0.8
 
-#max_epoch: 1
-max_epoch: 4
-#max_epoch: 10
-#max_epoch: 20
-#max_epoch: 50
+max_epoch: 8
 
 log: ./
 

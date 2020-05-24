@@ -63,6 +63,7 @@ class InstanceExtentFilling(nn.Sequential):
                              result.size(2), result.size(3), -1
                              )
         result = result.sum(4)
+
         return result
 
     @staticmethod
