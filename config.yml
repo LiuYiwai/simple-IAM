@@ -31,13 +31,10 @@ test_transform:
   std: [0.229, 0.224, 0.225]
 
 data_loaders:
-  batch_size: 1
-  #  batch_size: 2
-  #  batch_size: 8
+  batch_size: 8
   #  batch_size: 16
   #  batch_size: 32
-  #  num_workers: 4
-  num_workers: 1
+  num_workers: 4
 
 test_data_loaders:
   batch_size: 1
@@ -49,7 +46,7 @@ model:
   enable_peak_stimulation: true
 
 optimizer:
-  lr: 0.001
+  lr: 0.01
   momentum: 0.9
   weight_decay: 1.0e-4
 
@@ -81,3 +78,4 @@ max_epoch: 8
 log: ./
 
 snapshot: ./snapshots
+
