@@ -121,7 +121,7 @@ class Solver(object):
             instance_list = list(filter(iou_filter, instance_list))
             selected_instances.extend(instance_list)
         return selected_instances
-
+    
     def pseudo_gt_sampling(self, peak_list, peak_response_maps, retrieval_cfg):
         # cast tensors to numpy array
         peak_list = peak_list.cpu().numpy()
@@ -267,6 +267,8 @@ class Solver(object):
         for epoch in range(self.max_epoch):
             average_loss = 0.
             for iteration, (inp, proposals) in enumerate(train_data_loader):
+
+                since2 = time.time()
 
                 inp = inp.to(self.device)
 
