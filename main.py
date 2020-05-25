@@ -56,7 +56,7 @@ def main(args):
         config['data_loaders']['dataset'] = dataset
         data_loader = get_dataloader(**config['data_loaders'])
 
-        solver.train_filling(data_loader, train_logger, val_data_loader)
+        solver.train_filling(data_loader, train_logger)
         print('train filling over')
 
     if args.run_demo:
