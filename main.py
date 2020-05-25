@@ -23,13 +23,26 @@ def main(args):
                                     'target_transform': None,
                                     'categories': config['class_names']})
 
+    if config.get('val_dataset') is not None:
+        config['val_dataset'].update({'transform': train_trans,
+                                      'target_transform': None,
+                                      'categories': config['class_names']})
+
     if args.train_prm:
         config['train_dataset'].update({'train_type': 'prm'})
         dataset = train_dataset(**config['train_dataset'])
         config['data_loaders']['dataset'] = dataset
         data_loader = get_dataloader(**config['data_loaders'])
 
-        solver.train_prm(data_loader, train_logger)
+        if config.get('val_dataset') is not None:
+            config['val_dataset'].update({'train_type': 'prm'})
+            dataset = train_dataset(**config['val_dataset'])
+            config['data_loaders']['dataset'] = dataset
+            val_data_loader = get_dataloader(**config['data_loaders'])
+        else:
+            val_data_loader = None
+
+        solver.train_prm(data_loader, train_logger, val_data_loader)
         print('train prm over')
 
     if args.train_filling:
@@ -38,11 +51,12 @@ def main(args):
             'train_type': 'filling',
             'target_transform': proposals_trans,
         })
+
         dataset = train_dataset(**config['train_dataset'])
         config['data_loaders']['dataset'] = dataset
         data_loader = get_dataloader(**config['data_loaders'])
 
-        solver.train_filling(data_loader, train_logger)
+        solver.train_filling(data_loader, train_logger, val_data_loader)
         print('train filling over')
 
     if args.run_demo:

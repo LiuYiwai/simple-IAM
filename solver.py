@@ -45,10 +45,9 @@ class Solver(object):
 
         self.params = finetune(self.prm_module, **config['finetune'])
         self.optimizer_prm = sgd_optimizer(self.params, **config['optimizer'])
-
-        self.params = finetune(self.filling_module, **config['finetune'])
-        self.optimizer_filling = sgd_optimizer(self.params, **config['optimizer'])
-        # self.optimizer_filling = torch.optim.RMSprop(self.filling_module.parameters())
+        # self.optimizer_filling = sgd_optimizer(self.filling_module.parameters(), **config['optimizer'])
+        self.optimizer_filling = torch.optim.RMSprop(self.filling_module.parameters())
+        # self.optimizer_filling = torch.optim.Adam(self.filling_module.parameters())
         # self.optimizer_filling = torch.optim.Adadelta(self.filling_module.parameters())
 
         self.lr_update_step = 999999
@@ -121,7 +120,7 @@ class Solver(object):
             instance_list = list(filter(iou_filter, instance_list))
             selected_instances.extend(instance_list)
         return selected_instances
-    
+
     def pseudo_gt_sampling(self, peak_list, peak_response_maps, retrieval_cfg):
         # cast tensors to numpy array
         peak_list = peak_list.cpu().numpy()
@@ -137,6 +136,7 @@ class Solver(object):
 
         # proposal contour width
         contour_width = retrieval_cfg.get('contour_width', 5)
+        # contour_width = retrieval_cfg.get('contour_width', 10)
 
         # limit range of proposal size
         proposal_size_limit = retrieval_cfg.get('proposal_size_limit', (0.00002, 0.85))
@@ -145,7 +145,7 @@ class Solver(object):
         proposal_count = retrieval_cfg.get('proposal_count', 100)
 
         # nms threshold
-        nms_threshold = retrieval_cfg.get('nms_threshold', 0.2)
+        discard_threshold = retrieval_cfg.get('discard_threshold', 0.2)
 
         # metric free parameters
         param = retrieval_cfg.get('param', None)
@@ -196,9 +196,9 @@ class Solver(object):
             candidates_num = min(self.k_proposals, len(proposal_val_list))
             proposal_val_list = proposal_val_list[0:candidates_num]
 
-            if nms_threshold is not None:
+            if discard_threshold is not None:
                 proposal_val_list = self.discard_proposals(proposal_val_list,
-                                                           nms_threshold)
+                                                           discard_threshold)
 
             choice_index = np.random.choice(len(proposal_val_list), 1)[0]
 
@@ -212,9 +212,13 @@ class Solver(object):
         print('Start training prm...')
         since = time.time()
 
-        self.prm_module.train()  # Set model to training mode
+        min_val_loss = np.inf
+        min_val_epoch = 0
 
         for epoch in range(self.max_epoch):
+
+            self.prm_module.train()  # Set model to training mode
+
             average_loss = 0.
             for iteration, (inp, tar) in enumerate(train_data_loader):
                 inp = inp.to(self.device)
@@ -237,12 +241,26 @@ class Solver(object):
                 train_logger.add_scalar('lr', lr, epoch)
                 train_logger.add_scalar('loss', loss, epoch)
 
-            self.save_checkpoint({'arch': 'iam',
-                                  'lr': self.lr,
-                                  'epoch': epoch,
-                                  'state_dict': self.prm_module.state_dict(),
-                                  'error': average_loss},
-                                 self.snapshot, 'model_prm', epoch, 'checkpoint_prm.pth.tar')
+            is_save_checkpoint = True
+            if val_data_loader is not None:
+                val_loss = self.validation_prm(val_data_loader)
+
+                if val_loss < min_val_loss:
+                    min_val_loss = val_loss
+                    min_val_epoch = epoch
+                else:
+                    is_save_checkpoint = False
+
+                print(f'minn val loss at epoch {min_val_epoch + 1} = {min_val_loss}')
+                print(f'val loss at epoch {epoch + 1} = {loss}')
+
+            if is_save_checkpoint:
+                self.save_checkpoint({'arch': 'iam',
+                                      'lr': self.lr,
+                                      'epoch': epoch,
+                                      'state_dict': self.prm_module.state_dict(),
+                                      'error': average_loss},
+                                     self.snapshot, 'model_prm', epoch, 'checkpoint_prm.pth.tar')
 
             print('training %d epoch,loss is %.4f' % (epoch + 1, average_loss))
             # TO-DO: modify learning rates.
@@ -252,8 +270,8 @@ class Solver(object):
 
     def train_filling(self, train_data_loader, train_logger, val_data_loader=None, val_logger=None):
         # self.restore_filling_model()
-        self.restore_prm_model()
         # Start training.
+        self.restore_prm_model()
         print('Start training filling...')
         since = time.time()
 
@@ -263,7 +281,6 @@ class Solver(object):
         peak_response_maps_list = []
         peak_list_list = []
         feature_maps_list = []
-
         for epoch in range(self.max_epoch):
             average_loss = 0.
             for iteration, (inp, proposals) in enumerate(train_data_loader):
@@ -321,13 +338,6 @@ class Solver(object):
                 train_logger.add_scalar('lr', lr, epoch)
                 train_logger.add_scalar('loss', loss, epoch)
 
-                self.save_checkpoint({'arch': 'iam',
-                                      'lr': self.lr,
-                                      'epoch': epoch,
-                                      'state_dict': self.filling_module.state_dict(),
-                                      'error': average_loss},
-                                     self.snapshot, 'model_filling', epoch, 'checkpoint_filling.pth.tar')
-
             self.save_checkpoint({'arch': 'iam',
                                   'lr': self.lr,
                                   'epoch': epoch,
@@ -368,6 +378,7 @@ class Solver(object):
         d.addPairwiseGaussian(sxy=3, compat=3)
         d.addPairwiseBilateral(sxy=80, srgb=13, rgbim=img, compat=10)
 
+        # Q = d.inference(5)
         Q = d.inference(3)
         Q = np.argmax(np.array(Q), axis=0).reshape((h, w))
 
@@ -378,9 +389,7 @@ class Solver(object):
         self.restore_filling_model()
 
         # Visual cue extraction
-        # self.filling_module.eval()
-        # TODO
-        self.filling_module.train()
+        self.filling_module.eval()
 
         peak_response_maps_list = []
         peak_list_list = []
@@ -410,6 +419,11 @@ class Solver(object):
 
                 if return_tuple is None:
                     print('class aware pass')
+                    img = transforms.ToPILImage()(rar_img[idx]).convert('RGB')
+                    img = img.resize(size=(self.image_size, self.image_size), resample=Image.BICUBIC)
+                    plt.imshow(img)
+                    plt.title('class aware pass')
+                    plt.show()
                     continue
                 else:
                     aware_list.append(idx)
@@ -453,7 +467,6 @@ class Solver(object):
                     axarr[1].set_title('Class Response Map ("%s")' % self.class_names[class_idx])
                     axarr[1].axis('off')
                     raw_img = np.array(img)
-                    # raw_img = inp[batch_idx].permute(1, 2, 0).cpu().detach().numpy()
                     raw_img = raw_img.astype(np.uint8)
                     for idx, (iam, peak) in enumerate(
                             sorted(zip(instance_activate_maps[mask], peak_list[mask]), key=lambda v: v[-1][-1])):
@@ -466,6 +479,21 @@ class Solver(object):
                     plt.show()
                     # TODO save
 
-    def validation(self, data_loader, test_logger, inference_epoch=0):
-        # to-do
-        pass
+    def validation_prm(self, data_loader):
+        self.prm_module.inference()
+        val_loss = 0.
+        epochs = 0
+        for iteration, (inp, tar) in enumerate(data_loader):
+            inp = inp.to(self.device)
+            tar = tar.to(self.device)
+
+            with torch.no_grad():
+                _output = self.prm_module(inp)
+
+            loss = self.prm_module_criterion(_output, tar, difficult_samples=True)
+            val_loss += loss
+
+            epochs = iteration
+
+        val_loss /= (epochs + 1)
+        return val_loss

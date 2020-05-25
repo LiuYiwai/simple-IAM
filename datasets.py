@@ -119,8 +119,7 @@ def get_dataloader(dataset: Callable[[str], Dataset],
                    num_workers: int = 0,
                    pin_memory: bool = True,
                    drop_last: bool = False,
-                   # train_shuffle: bool = True,
-                   train_shuffle: bool = False,
+                   train_shuffle: bool = True,
                    test_shuffle: bool = False,
                    train_augmentation: dict = {},
                    test_augmentation: dict = {},
@@ -142,7 +141,7 @@ def get_dataloader(dataset: Callable[[str], Dataset],
 class TrainDataset(Dataset):
     __meta_class__ = ABCMeta
 
-    def __init__(self, data_dir, split, classes, transform=None, target_transform=None):
+    def __init__(self, data_dir, split, classes, transform=None, target_transform=None, rate=1):
         self.data_dir = data_dir
         self.split = split
         self.image_dir = os.path.join(data_dir, 'JPEGImages')
@@ -152,7 +151,8 @@ class TrainDataset(Dataset):
         self.transform = transform
         self.target_transform = target_transform
         self.classes = classes
-        self.image_labels = self._read_annotations(self.split)
+        self.rate = rate
+        self.image_labels = self._read_annotations(self.split, self.rate)
 
         @abstractmethod
         def _read_annotation():
@@ -161,10 +161,10 @@ class TrainDataset(Dataset):
 
 class TrainPRMDataset(TrainDataset):
 
-    def __init__(self, data_dir, split, classes, transform=None, target_transform=None):
-        super(TrainPRMDataset, self).__init__(data_dir, split, classes, transform, target_transform)
+    def __init__(self, data_dir, split, classes, transform=None, target_transform=None, rate=1):
+        super(TrainPRMDataset, self).__init__(data_dir, split, classes, transform, target_transform, rate=1)
 
-    def _read_annotations(self, split):
+    def _read_annotations(self, split, rate):
         class_labels = OrderedDict()
         num_classes = len(self.classes)
         if os.path.exists(os.path.join(self.gt_path, split + '.txt')):
@@ -181,7 +181,16 @@ class TrainPRMDataset(TrainDataset):
             raise NotImplementedError(
                 'Invalid "%s" split for PASCAL %s classification task.' % (split, self.data_dir))
 
-        return list(class_labels.items())
+        class_labels = list(class_labels.items())
+
+        n_total = len(class_labels)
+        offset = int(n_total * rate)
+        if n_total == 0 or offset < 1:
+            return class_labels
+        random.shuffle(class_labels)
+        class_labels = class_labels[:offset]
+
+        return class_labels
 
     def __getitem__(self, index):
         filename, target = self.image_labels[index]
@@ -200,12 +209,12 @@ class TrainPRMDataset(TrainDataset):
 
 class TrainFillingDataset(TrainDataset):
 
-    def __init__(self, data_dir, split, classes, transform=None, target_transform=None):
+    def __init__(self, data_dir, split, classes, transform=None, target_transform=None, rate=1):
         super(TrainFillingDataset, self).__init__(data_dir, split, classes, transform, target_transform)
         self.proposal_path = os.path.join(self.data_dir, 'ImageProposals')
         assert os.path.isdir(self.gt_path), 'Could not find image proposal folder "%s".' % self.proposal_path
 
-    def _read_annotations(self, split):
+    def _read_annotations(self, split, rate):
         class_labels = OrderedDict()
         num_classes = len(self.classes)
         if os.path.exists(os.path.join(self.gt_path, split + '.txt')):
@@ -222,7 +231,16 @@ class TrainFillingDataset(TrainDataset):
             raise NotImplementedError(
                 'Invalid "%s" split for PASCAL %s classification task.' % (split, self.data_dir))
 
-        return list(class_labels.items())
+        class_labels = list(class_labels.items())
+
+        n_total = len(class_labels)
+        offset = int(n_total * rate)
+        if n_total == 0 or offset < 1:
+            return class_labels
+        random.shuffle(class_labels)
+        class_labels = class_labels[:offset]
+
+        return class_labels
 
     def __getitem__(self, index):
         filename, target = self.image_labels[index]
@@ -256,13 +274,14 @@ def train_dataset(
         split: str,
         data_dir: str,
         categories: List,
+        rate: int = 1,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         delay_resolve=True) -> Dataset:
     if train_type == 'prm':
-        return TrainPRMDataset(data_dir, split, categories, transform, target_transform)
+        return TrainPRMDataset(data_dir, split, categories, transform, target_transform, rate)
     elif train_type == 'filling':
-        return TrainFillingDataset(data_dir, split, categories, transform, target_transform)
+        return TrainFillingDataset(data_dir, split, categories, transform, target_transform, rate)
 
 
 class TestDataset(Dataset):
@@ -275,7 +294,7 @@ class TestDataset(Dataset):
         self.transform = transform
         self.img_name = self._read_img_name(split)
         self.to_tensor = transforms.Compose([
-            transforms.Resize((image_size, image_size)),
+            transforms.Resize(tuple(image_size)),
             transforms.ToTensor(),
         ])
 
@@ -290,6 +309,7 @@ class TestDataset(Dataset):
         else:
             raise NotImplementedError(
                 'Invalid "%s" split for PASCAL %s classification task.' % (split, self.data_dir))
+
         return img_name
 
     def __getitem__(self, index):

@@ -39,6 +39,7 @@ class PeakStimulation(Function):
         if return_aggregation:
             peak_map = peak_map.float()
             ctx.save_for_backward(input, peak_map)
+
             return peak_list, (input * peak_map).view(batch_size, num_channels, -1).sum(2) / \
                    peak_map.view(batch_size, num_channels, -1).sum(2)
         else:

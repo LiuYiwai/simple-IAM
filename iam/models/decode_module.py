@@ -11,22 +11,25 @@ class DecodeModule(nn.Module):
             pool_multiple = [2, 2]
         self.pool_multiple = pool_multiple
 
+        # track_running_stats = True
+        track_running_stats = False
+
         # decode modules
         self.decode1 = nn.Sequential(
             nn.ConvTranspose2d(channel_num, channel_num, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(channel_num, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
+            nn.BatchNorm2d(channel_num, track_running_stats=track_running_stats),
             nn.ReLU(inplace=True),
         )
 
         self.decode2 = nn.Sequential(
             nn.ConvTranspose2d(channel_num, channel_num, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(channel_num, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
+            nn.BatchNorm2d(channel_num, track_running_stats=track_running_stats),
             nn.ReLU(inplace=True),
         )
 
         self.decode3 = nn.Sequential(
             nn.ConvTranspose2d(channel_num, 1, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(1, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
+            nn.BatchNorm2d(1, track_running_stats=track_running_stats),
             nn.Sigmoid(),
         )
 

@@ -14,32 +14,35 @@ class FeaturePyramid(nn.Module):
         feature_num = self.r * self.r * self.C
         intermediate_feature = input_feature // 4
 
+        # track_running_stats = True
+        track_running_stats = False
+
         self.feature1 = nn.Sequential(
             nn.Conv2d(input_feature, intermediate_feature, kernel_size=1, stride=1),
-            nn.BatchNorm2d(intermediate_feature, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
+            nn.BatchNorm2d(intermediate_feature, track_running_stats=track_running_stats),
             # nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1, dilation=1, ceil_mode=False),
         )
 
         self.feature2 = nn.Sequential(
             nn.Conv2d(intermediate_feature, feature_num, kernel_size=1, stride=1),
-            nn.BatchNorm2d(feature_num, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
+            nn.BatchNorm2d(feature_num, track_running_stats=track_running_stats),
             # nn.ReLU(inplace=True),
         )
 
         self.lateral_layer2 = nn.Sequential(
             nn.Conv2d(intermediate_feature, feature_num, kernel_size=1, stride=1),
-            nn.BatchNorm2d(feature_num, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
+            nn.BatchNorm2d(feature_num, track_running_stats=track_running_stats),
         )
 
         self.smooth2 = nn.Sequential(
             nn.Conv2d(feature_num, feature_num, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(feature_num, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
+            nn.BatchNorm2d(feature_num, track_running_stats=track_running_stats),
         )
 
         self.smooth_out = nn.Sequential(
             nn.Conv2d(feature_num, feature_num, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(feature_num, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
+            nn.BatchNorm2d(feature_num, track_running_stats=track_running_stats),
             nn.ReLU(inplace=True),
         )
 

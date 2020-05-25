@@ -12,6 +12,8 @@ class PeakResponseMapping(nn.Sequential):
     def __init__(self, *args, **kargs):
         super(PeakResponseMapping, self).__init__(*args)
 
+        self.freeze_bn = True
+
         self.inferencing = False
         # use global average pooling to aggregate responses if peak stimulation is disabled
         self.enable_peak_stimulation = kargs.get('enable_peak_stimulation', True)
@@ -63,8 +65,16 @@ class PeakResponseMapping(nn.Sequential):
             if isinstance(module, nn.Conv2d) and hasattr(module, '_original_forward'):
                 module.forward = module._original_forward
 
+    def freeze_bn_layer(self):
+        """Freeze BatchNorm layers."""
+        for layer in self.modules():
+            if isinstance(layer, nn.BatchNorm2d):
+                layer.eval()
+
     def train(self, mode=True):
         super(PeakResponseMapping, self).train(mode)
+        if self.freeze_bn:
+            self.freeze_bn_layer()
         if self.inferencing:
             self._recover()
             self.inferencing = False
@@ -107,6 +117,7 @@ class PeakResponseMapping(nn.Sequential):
             # extract instance-aware visual cues, i.e., peak response maps
             assert class_response_maps.size(
                 0) == 1, 'Currently inference mode (with peak backpropagation) only supports one image at a time.'
+
             if peak_list is None:
                 peak_list = peak_stimulation(class_response_maps, return_aggregation=False, win_size=self.win_size,
                                              peak_filter=self.peak_filter)
@@ -115,6 +126,7 @@ class PeakResponseMapping(nn.Sequential):
             valid_peak_list = []
             # peak backpropagation
             grad_output = class_response_maps.new_empty(class_response_maps.size())
+
             for idx in range(peak_list.size(0)):
                 if aggregation[peak_list[idx, 0], peak_list[idx, 1]] >= class_threshold:
                     peak_val = class_response_maps[
