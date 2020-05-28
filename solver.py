@@ -31,7 +31,7 @@ class Solver(object):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.basebone = fc_resnet50(self.class_num, True)
         self.prm_module = peak_response_mapping(self.basebone, **config['model'])
-        self.filling_module = instance_extent_filling(self.basebone, config)
+        self.filling_module = instance_extent_filling(config)
 
         self.cuda = torch.cuda.is_available()
         if self.cuda:
@@ -136,7 +136,6 @@ class Solver(object):
 
         # proposal contour width
         contour_width = retrieval_cfg.get('contour_width', 5)
-        # contour_width = retrieval_cfg.get('contour_width', 10)
 
         # limit range of proposal size
         proposal_size_limit = retrieval_cfg.get('proposal_size_limit', (0.00002, 0.85))
@@ -280,7 +279,9 @@ class Solver(object):
 
         peak_response_maps_list = []
         peak_list_list = []
-        feature_maps_list = []
+        p2_list = []
+        p3_list = []
+        p4_list = []
         for epoch in range(self.max_epoch):
             average_loss = 0.
             for iteration, (inp, proposals) in enumerate(train_data_loader):
@@ -289,7 +290,9 @@ class Solver(object):
 
                 peak_response_maps_list.clear()
                 peak_list_list.clear()
-                feature_maps_list.clear()
+                p2_list.clear()
+                p3_list.clear()
+                p4_list.clear()
                 for idx in range(inp.size(0)):
                     item = inp[idx].unsqueeze(0)
                     return_tuple = self.prm_module(item)
@@ -297,13 +300,15 @@ class Solver(object):
                     if return_tuple is None:
                         continue
                     else:
-                        visual_cues, feature_maps = return_tuple
+                        visual_cues, p2, p3, p4 = return_tuple
                         peak_response_maps = visual_cues[3]
                         peak_list = visual_cues[2]
                         peak_list[:, 0] = idx
                         peak_response_maps_list.append(peak_response_maps)
                         peak_list_list.append(peak_list)
-                        feature_maps_list.append(feature_maps)
+                        p2_list.append(p2)
+                        p3_list.append(p3)
+                        p4_list.append(p4)
 
                 if len(peak_response_maps_list) == 0:
                     print('trainning pass epoch %d iteration %d' % (epoch + 1, iteration))
@@ -311,17 +316,21 @@ class Solver(object):
 
                 peak_response_maps = torch.cat(peak_response_maps_list)
                 peak_list = torch.cat(peak_list_list)
-                feature_maps = torch.cat(feature_maps_list)
+                p2 = torch.cat(p2_list)
+                p3 = torch.cat(p3_list)
+                p4 = torch.cat(p4_list)
 
                 retrieval_cfg = dict(proposals=proposals, param=(self.balance_factor,))
                 pseudo_gt_mask = self.pseudo_gt_sampling(peak_list, peak_response_maps, retrieval_cfg)
                 pseudo_gt_mask = torch.Tensor(pseudo_gt_mask)
 
+                p2 = p2.to(self.device)
+                p3 = p3.to(self.device)
+                p4 = p4.to(self.device)
                 peak_response_maps = peak_response_maps.to(self.device)
-                feature_maps = feature_maps.to(self.device)
                 pseudo_gt_mask = pseudo_gt_mask.to(self.device)
 
-                _output = self.filling_module(peak_response_maps, peak_list, feature_maps)
+                _output = self.filling_module(peak_response_maps, peak_list, p2, p3, p4)
 
                 loss = self.filling_module_criterion(_output, pseudo_gt_mask)
 
@@ -390,10 +399,13 @@ class Solver(object):
 
         # Visual cue extraction
         self.filling_module.eval()
+        # self.filling_module.train()
 
         peak_response_maps_list = []
         peak_list_list = []
-        feature_maps_list = []
+        p2_list = []
+        p3_list = []
+        p4_list = []
         class_response_maps_list = []
         aware_list = []
         for iteration, (inp, rar_img) in enumerate(test_data_loader):
@@ -410,7 +422,9 @@ class Solver(object):
 
             peak_response_maps_list.clear()
             peak_list_list.clear()
-            feature_maps_list.clear()
+            p2_list.clear()
+            p3_list.clear()
+            p4_list.clear()
             class_response_maps_list.clear()
             aware_list.clear()
             for idx in range(inp.size(0)):
@@ -427,12 +441,14 @@ class Solver(object):
                     continue
                 else:
                     aware_list.append(idx)
-                    visual_cues, feature_maps = return_tuple
+                    visual_cues, p2, p3, p4 = return_tuple
                     confidence, class_response_maps, peak_list, peak_response_maps = visual_cues
                     peak_list[:, 0] = idx
                     peak_response_maps_list.append(peak_response_maps)
                     peak_list_list.append(peak_list)
-                    feature_maps_list.append(feature_maps)
+                    p2_list.append(p2)
+                    p3_list.append(p3)
+                    p4_list.append(p4)
                     class_response_maps_list.append(class_response_maps)
 
             if len(aware_list) == 0:
@@ -441,10 +457,17 @@ class Solver(object):
 
             peak_response_maps = torch.cat(peak_response_maps_list)
             peak_list = torch.cat(peak_list_list)
-            feature_maps = torch.cat(feature_maps_list)
+            p2 = torch.cat(p2_list)
+            p3 = torch.cat(p3_list)
+            p4 = torch.cat(p4_list)
             class_response_maps = torch.cat(class_response_maps_list)
 
-            instance_activate_maps = self.filling_module(peak_response_maps, peak_list, feature_maps)
+            p2 = p2.to(self.device)
+            p3 = p3.to(self.device)
+            p4 = p4.to(self.device)
+            peak_response_maps = peak_response_maps.to(self.device)
+
+            instance_activate_maps = self.filling_module(peak_response_maps, peak_list, p2, p3, p4)
             instance_activate_maps = instance_activate_maps.detach()
 
             if visual_cues is None:
@@ -480,7 +503,7 @@ class Solver(object):
                     # TODO save
 
     def validation_prm(self, data_loader):
-        self.prm_module.inference()
+        self.prm_module.eval()
         val_loss = 0.
         epochs = 0
         for iteration, (inp, tar) in enumerate(data_loader):

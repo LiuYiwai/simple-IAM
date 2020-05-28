@@ -1,5 +1,3 @@
-from functools import reduce
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -11,25 +9,23 @@ from iam.models.feature_pyramid import FeaturePyramid
 
 class InstanceExtentFilling(nn.Sequential):
 
-    def __init__(self, channel_num=16, kernel=3, iterate_num=10,
-                 pool_multiple=None, image_size=448, feature_map_channel=2048):
+    def __init__(self, channel_num=8, kernel=3, iterate_num=10, image_size=448):
         super(InstanceExtentFilling, self).__init__()
-
-        if pool_multiple is None:
-            pool_multiple = [2, 2]
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.iterate_num = iterate_num
         self.channel_num = channel_num
-        self.pool_multiple = pool_multiple
+        self.pool_multiple = 2 * 2
         self.kernel = kernel
-        self.W = self.H = image_size // reduce(lambda x, y: x * y, self.pool_multiple)
+        self.W = self.H = image_size // 4
         self.norm_sum = 1
 
-        self.encode = EncodeModule(self.channel_num, self.pool_multiple)
-        self.decode = DecodeModule(self.channel_num, self.pool_multiple)
-        self.feature_pyramid = FeaturePyramid(self.channel_num, self.kernel, feature_map_channel,
-                                              self.H, self.W)
+        track_running_stats = True
+        # track_running_stats = False
+
+        self.encode = EncodeModule(self.channel_num, track_running_stats)
+        self.decode = DecodeModule(self.channel_num, track_running_stats)
+        self.feature_pyramid = FeaturePyramid(self.channel_num, self.kernel, self.H, self.W, track_running_stats)
 
         self.offset = (self.kernel - 1) // 2
         mat_x_offset, mat_y_offset = np.meshgrid(np.arange(0, 2 * self.offset + 1),
@@ -76,11 +72,12 @@ class InstanceExtentFilling(nn.Sequential):
 
         return norm_weight
 
-    def forward(self, peak_response_maps, peak_list, feature_maps):
+    def forward(self, peak_response_maps, peak_list, p2, p3, p4):
 
-        pyramid = self.feature_pyramid(feature_maps)
+        batch_num = p2.shape[0]
+        pyramid = self.feature_pyramid(p2, p3, p4)
         weight = pyramid.permute(0, 2, 3, 1)
-        weight = weight.view(feature_maps.shape[0], self.H, self.W,
+        weight = weight.view(batch_num, self.H, self.W,
                              self.channel_num, self.kernel, self.kernel)
         weight = weight.permute(0, 3, 1, 2, 4, 5)
         norm_weight = self._norm_weight(weight)

@@ -64,13 +64,10 @@ def peak_response_mapping(
     return model
 
 
-def instance_extent_filling(backbone, config):
-    feature_map_channel = backbone.get_feature_map_channel()
-
+def instance_extent_filling(config):
     model = InstanceExtentFilling(channel_num=config['encode_channel'],
                                   kernel=config['filling_kernel'],
                                   iterate_num=config['iterate_num'],
-                                  pool_multiple=config['encode_pooling'],
                                   image_size=config['image_size'],
-                                  feature_map_channel=feature_map_channel)
+                                  )
     return model

@@ -12,7 +12,8 @@ class PeakResponseMapping(nn.Sequential):
     def __init__(self, *args, **kargs):
         super(PeakResponseMapping, self).__init__(*args)
 
-        self.freeze_bn = True
+        # self.freeze_bn = True
+        self.freeze_bn = False
 
         self.inferencing = False
         # use global average pooling to aggregate responses if peak stimulation is disabled
@@ -94,7 +95,7 @@ class PeakResponseMapping(nn.Sequential):
             _input.requires_grad_()
 
         # classification network forwarding
-        class_response_maps, feature_maps = super(PeakResponseMapping, self).forward(_input)
+        class_response_maps, p2, p3, p4 = super(PeakResponseMapping, self).forward(_input)
 
         if self.enable_peak_stimulation:
             # sub-pixel peak finding
@@ -151,7 +152,8 @@ class PeakResponseMapping(nn.Sequential):
                 valid_peak_list = torch.stack(valid_peak_list)
                 peak_response_maps = torch.cat(peak_response_maps, 0)
                 return_tuple = (aggregation, class_response_maps, valid_peak_list, peak_response_maps)
-                return return_tuple, feature_maps.detach()
+
+                return return_tuple, p2.detach(), p3.detach(), p4.detach()
             else:
                 return None
         else:

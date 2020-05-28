@@ -72,6 +72,10 @@ def main(args):
 
 
 if __name__ == "__main__":
+    import warnings
+
+    warnings.filterwarnings("ignore")
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_filling', type=bool, default=False, help='set train filling mode up')
     parser.add_argument('--train_prm', type=bool, default=False, help='set train prm mode up')

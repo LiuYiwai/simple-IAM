@@ -4,15 +4,8 @@ import torch.nn.functional as F
 
 class DecodeModule(nn.Module):
 
-    def __init__(self, channel_num=16, pool_multiple=None):
+    def __init__(self, channel_num=16, track_running_stats=True):
         super(DecodeModule, self).__init__()
-
-        if pool_multiple is None:
-            pool_multiple = [2, 2]
-        self.pool_multiple = pool_multiple
-
-        # track_running_stats = True
-        track_running_stats = False
 
         # decode modules
         self.decode1 = nn.Sequential(
@@ -34,15 +27,14 @@ class DecodeModule(nn.Module):
         )
 
     def forward(self, x):
+
         x = self.decode1(x)
 
-        upsampling_size = [x.size(2), x.size(3)]
-        upsampling_size = [item * self.pool_multiple[-1] for item in upsampling_size]
+        upsampling_size = [x.size(2) * 2, x.size(3) * 2]
         x = F.interpolate(x, size=upsampling_size, mode='bilinear', align_corners=True)
         x = self.decode2(x)
 
-        upsampling_size = [x.size(2), x.size(3)]
-        upsampling_size = [item * self.pool_multiple[-2] for item in upsampling_size]
+        upsampling_size = [x.size(2) * 2, x.size(3) * 2]
         x = F.interpolate(x, size=upsampling_size, mode='bilinear', align_corners=True)
         x = self.decode3(x)
 
