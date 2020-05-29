@@ -399,7 +399,6 @@ class Solver(object):
 
         # Visual cue extraction
         self.filling_module.eval()
-        # self.filling_module.train()
 
         peak_response_maps_list = []
         peak_list_list = []
@@ -466,8 +465,9 @@ class Solver(object):
             p3 = p3.to(self.device)
             p4 = p4.to(self.device)
             peak_response_maps = peak_response_maps.to(self.device)
-
-            instance_activate_maps = self.filling_module(peak_response_maps, peak_list, p2, p3, p4)
+                
+            with torch.no_grad():
+                instance_activate_maps = self.filling_module(peak_response_maps, peak_list, p2, p3, p4)
             instance_activate_maps = instance_activate_maps.detach()
 
             if visual_cues is None:
