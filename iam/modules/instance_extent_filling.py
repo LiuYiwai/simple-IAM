@@ -15,6 +15,7 @@ class InstanceExtentFilling(nn.Sequential):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.iterate_num = iterate_num
         self.channel_num = channel_num
+        self.bn_momentum = 0.1
         self.pool_multiple = 2 * 2
         self.kernel = kernel
         self.offset = kernel // 2
@@ -24,9 +25,23 @@ class InstanceExtentFilling(nn.Sequential):
         track_running_stats = True
         # track_running_stats = False
 
-        self.encode = EncodeModule(self.channel_num, track_running_stats)
-        self.decode = DecodeModule(self.channel_num, track_running_stats)
-        self.feature_pyramid = FeaturePyramid(self.channel_num, self.kernel, self.H, self.W, track_running_stats)
+        self.encode = EncodeModule(self.channel_num, self.bn_momentum, track_running_stats)
+        self.decode = DecodeModule(self.channel_num, self.bn_momentum, track_running_stats)
+        self.feature_pyramid = FeaturePyramid(self.channel_num, self.kernel, self.H, self.W,
+                                              self.bn_momentum, track_running_stats)
+
+    def eval(self):
+        super(InstanceExtentFilling, self).eval()
+        for layer in self.modules():
+            if isinstance(layer, nn.BatchNorm2d):
+                layer.train()
+                layer.momentum = 0
+
+    def train(self, mode=True):
+        super(InstanceExtentFilling, self).train(mode)
+        for layer in self.modules():
+            if isinstance(layer, nn.BatchNorm2d):
+                layer.momentum = self.bn_momentum
 
     def _iterate_filling(self, inp, peak_list, weight):
         batch_num = weight.size(0)

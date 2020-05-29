@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 class FeaturePyramid(nn.Module):
 
-    def __init__(self, channel_num=8, kernel=3, H=56, W=56, track_running_stats=True):
+    def __init__(self, channel_num=8, kernel=3, H=112, W=112, bn_momentum=0.1, track_running_stats=True):
         super(FeaturePyramid, self).__init__()
 
         self.H = H
@@ -18,26 +18,27 @@ class FeaturePyramid(nn.Module):
 
         self.latlayer3 = nn.Sequential(
             nn.Conv2d(512, intermediate_feature, kernel_size=1, stride=1),
-            nn.BatchNorm2d(intermediate_feature, track_running_stats=track_running_stats),
+            nn.BatchNorm2d(intermediate_feature, momentum=bn_momentum, track_running_stats=track_running_stats),
         )
 
         self.latlayer2 = nn.Sequential(
             nn.Conv2d(256, intermediate_feature, kernel_size=1, stride=1),
-            nn.BatchNorm2d(intermediate_feature, track_running_stats=track_running_stats),
+            nn.BatchNorm2d(intermediate_feature, momentum=bn_momentum, track_running_stats=track_running_stats),
         )
 
         self.smooth3 = nn.Sequential(
             nn.Conv2d(intermediate_feature, intermediate_feature, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(intermediate_feature, track_running_stats=track_running_stats),
+            nn.BatchNorm2d(intermediate_feature, momentum=bn_momentum, track_running_stats=track_running_stats),
+
         )
 
         # out
         self.smooth2 = nn.Sequential(
             nn.Conv2d(intermediate_feature, feature_num, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(feature_num, track_running_stats=track_running_stats),
+            nn.BatchNorm2d(feature_num, momentum=bn_momentum, track_running_stats=track_running_stats),
         )
 
-        self.ReLU = nn.ReLU(inplace=True)
+        self.activate = nn.ReLU(inplace=True)
 
     def _upsample_add(self, x, y):
         '''Upsample and add two feature maps.
@@ -64,5 +65,5 @@ class FeaturePyramid(nn.Module):
         p3 = self.smooth3(p3)
         p2 = self._upsample_add(p3, self.latlayer2(c2))
         p2 = self.smooth2(p2)
-        out = self.ReLU(p2)
+        out = self.activate(p2)
         return out
