@@ -1,6 +1,6 @@
-import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from iam.models.decode_module import DecodeModule
 from iam.models.encode_module import EncodeModule
@@ -17,6 +17,7 @@ class InstanceExtentFilling(nn.Sequential):
         self.channel_num = channel_num
         self.pool_multiple = 2 * 2
         self.kernel = kernel
+        self.offset = kernel // 2
         self.W = self.H = image_size // 4
         self.norm_sum = 1
 
@@ -27,33 +28,19 @@ class InstanceExtentFilling(nn.Sequential):
         self.decode = DecodeModule(self.channel_num, track_running_stats)
         self.feature_pyramid = FeaturePyramid(self.channel_num, self.kernel, self.H, self.W, track_running_stats)
 
-        self.offset = (self.kernel - 1) // 2
-        mat_x_offset, mat_y_offset = np.meshgrid(np.arange(0, 2 * self.offset + 1),
-                                                 np.arange(0, 2 * self.offset + 1))
-        mat_x_offset = mat_x_offset.reshape(-1)
-        mat_y_offset = mat_y_offset.reshape(-1)
-        self.mat_x_offset = list(mat_x_offset)
-        self.mat_y_offset = list(mat_y_offset)
-        self.mat_x_offset_end = list(mat_x_offset + self.W)
-        self.mat_y_offset_end = list(mat_y_offset + self.H)
-        self.padding = torch.nn.ConstantPad2d(self.offset, 0)
-
     def _iterate_filling(self, inp, peak_list, weight):
-
         batch_num = weight.size(0)
         result = torch.zeros_like(inp)
-        padding_inp = self.padding(inp)
 
+        unfold_inp = F.unfold(inp, kernel_size=self.kernel, padding=self.offset)
         for batch_idx in range(batch_num):
             mask = peak_list[:, 0] == batch_idx
             if mask.sum().item() == 0:
                 continue
-            for i in range(self.kernel * self.kernel):
-                result[mask, :, :, :] += padding_inp[
-                                         mask, :,
-                                         self.mat_x_offset[i]:self.mat_x_offset_end[i],
-                                         self.mat_y_offset[i]:self.mat_y_offset_end[i]] * \
-                                         weight[batch_idx, :, :, :, self.mat_x_offset[i], self.mat_y_offset[i]]
+            temp = unfold_inp[mask].mul(weight[batch_idx])
+            temp = temp.view(temp.shape[0], self.channel_num, self.kernel, self.kernel, self.H, self.W)
+            temp = temp.permute(0, 1, 4, 5, 2, 3).view(temp.shape[0], self.channel_num, self.H, self.W, -1)
+            result[mask] = temp.sum(4)
 
         return result
 
@@ -75,18 +62,20 @@ class InstanceExtentFilling(nn.Sequential):
     def forward(self, peak_response_maps, peak_list, p2, p3, p4):
 
         batch_num = p2.shape[0]
+
         pyramid = self.feature_pyramid(p2, p3, p4)
         weight = pyramid.permute(0, 2, 3, 1)
         weight = weight.view(batch_num, self.H, self.W,
                              self.channel_num, self.kernel, self.kernel)
-        weight = weight.permute(0, 3, 1, 2, 4, 5)
-        norm_weight = self._norm_weight(weight)
+        weight = self._norm_weight(weight)
+        weight = weight.view(batch_num, self.H, self.W, -1)
+        weight = weight.permute(0, 3, 1, 2).view(batch_num, weight.shape[3], -1)
 
         inp = peak_response_maps.unsqueeze(1)
         x = self.encode(inp)
 
         for i in range(self.iterate_num):
-            x = self._iterate_filling(x, peak_list, norm_weight)
+            x = self._iterate_filling(x, peak_list, weight)
 
         decode_out = self.decode(x)
         decode_out = decode_out.squeeze(1)
