@@ -27,6 +27,7 @@ class Solver(object):
         self.class_names = config['class_names']
         self.k_proposals = config['k_proposals']
         self.balance_factor = config['balance_factor']
+        self.out_img_path = config['out_img_path']
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.basebone = fc_resnet50(self.class_num, True)
@@ -46,9 +47,14 @@ class Solver(object):
         self.params = finetune(self.prm_module, **config['finetune'])
         self.optimizer_prm = sgd_optimizer(self.params, **config['optimizer'])
         # self.optimizer_filling = sgd_optimizer(self.filling_module.parameters(), **config['optimizer'])
-        self.optimizer_filling = torch.optim.RMSprop(self.filling_module.parameters())
-        # self.optimizer_filling = torch.optim.Adam(self.filling_module.parameters())
+        # self.optimizer_filling = torch.optim.RMSprop(self.filling_module.parameters())
+        self.optimizer_filling = torch.optim.Adam(self.filling_module.parameters())
         # self.optimizer_filling = torch.optim.Adadelta(self.filling_module.parameters())
+
+        self.prm_epoch_offset = 0
+        self.filling_epoch_offset = 0
+        self.train_prm_continue = config['train_prm_continue']
+        self.train_filling_continue = config['train_filling_continue']
 
         self.lr_update_step = 999999
         self.lr = config['optimizer']['lr']
@@ -71,6 +77,7 @@ class Solver(object):
             checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage.cuda())
         else:
             checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage.cpu())
+        self.prm_epoch_offset = checkpoint['epoch']
         self.prm_module.load_state_dict(checkpoint['state_dict'], False)
         self.lr = checkpoint['lr']
 
@@ -82,6 +89,7 @@ class Solver(object):
             checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage.cuda())
         else:
             checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage.cpu())
+        self.filling_epoch_offset = checkpoint['epoch']
         self.filling_module.load_state_dict(checkpoint['state_dict'], False)
         self.lr = checkpoint['lr']
 
@@ -199,6 +207,7 @@ class Solver(object):
                 proposal_val_list = self.discard_proposals(proposal_val_list,
                                                            discard_threshold)
 
+            # randomly samples a proposal
             choice_index = np.random.choice(len(proposal_val_list), 1)[0]
 
             pseudo_gt_mask.append(proposal_val_list[choice_index][2].astype(float))
@@ -206,7 +215,8 @@ class Solver(object):
         return pseudo_gt_mask
 
     def train_prm(self, train_data_loader, train_logger, val_data_loader=None, val_logger=None):
-        # self.restore_prm_model()
+        if self.train_prm_continue:
+            self.restore_prm_model()
         # Start training.
         print('Start training prm...')
         since = time.time()
@@ -229,13 +239,14 @@ class Solver(object):
 
                 average_loss += loss.item()
                 print('trainning loss at (epoch %d, iteration %d) = %4f' % (
-                    epoch + 1, iteration, average_loss / (iteration + 1)))
+                    epoch + self.prm_epoch_offset + 1, iteration, average_loss / (iteration + 1)))
 
                 self.optimizer_prm.zero_grad()
                 loss.backward()
                 self.optimizer_prm.step()
 
                 #################### LOGGING #############################
+                # sry, i don't know how to use this
                 lr = self.optimizer_prm.param_groups[0]['lr']
                 train_logger.add_scalar('lr', lr, epoch)
                 train_logger.add_scalar('loss', loss, epoch)
@@ -250,25 +261,27 @@ class Solver(object):
                 else:
                     is_save_checkpoint = False
 
-                print(f'minn val loss at epoch {min_val_epoch + 1} = {min_val_loss}')
-                print(f'val loss at epoch {epoch + 1} = {loss}')
+                print(f'minn val loss at epoch {min_val_epoch + self.prm_epoch_offset + 1} = {min_val_loss}')
+                print(f'val loss at epoch {epoch + self.prm_epoch_offset + 1} = {loss}')
 
             if is_save_checkpoint:
                 self.save_checkpoint({'arch': 'iam',
                                       'lr': self.lr,
-                                      'epoch': epoch,
+                                      'epoch': epoch + self.prm_epoch_offset,
                                       'state_dict': self.prm_module.state_dict(),
                                       'error': average_loss},
-                                     self.snapshot, 'model_prm', epoch, 'checkpoint_prm.pth.tar')
+                                     self.snapshot, 'model_prm', epoch + self.prm_epoch_offset,
+                                     'checkpoint_prm.pth.tar')
 
-            print('training %d epoch,loss is %.4f' % (epoch + 1, average_loss))
+            print('training %d epoch,loss is %.4f' % (epoch + self.prm_epoch_offset + 1, average_loss))
             # TO-DO: modify learning rates.
 
         time_elapsed = time.time() - since
         print('train phrase completed in %.0fm %.0fs' % (time_elapsed // 60, time_elapsed % 60))
 
     def train_filling(self, train_data_loader, train_logger, val_data_loader=None, val_logger=None):
-        # self.restore_filling_model()
+        if self.train_filling_continue:
+            self.restore_filling_model()
         # Start training.
         self.restore_prm_model()
         print('Start training filling...')
@@ -277,22 +290,18 @@ class Solver(object):
         self.prm_module.inference()
         self.filling_module.train()
 
-        peak_response_maps_list = []
+        p_list = []
         peak_list_list = []
-        p2_list = []
-        p3_list = []
-        p4_list = []
+        peak_response_maps_list = []
         for epoch in range(self.max_epoch):
             average_loss = 0.
             for iteration, (inp, proposals) in enumerate(train_data_loader):
 
                 inp = inp.to(self.device)
 
-                peak_response_maps_list.clear()
+                p_list.clear()
                 peak_list_list.clear()
-                p2_list.clear()
-                p3_list.clear()
-                p4_list.clear()
+                peak_response_maps_list.clear()
                 for idx in range(inp.size(0)):
                     item = inp[idx].unsqueeze(0)
                     return_tuple = self.prm_module(item)
@@ -301,24 +310,22 @@ class Solver(object):
                         continue
                     else:
                         visual_cues, p2, p3, p4 = return_tuple
-                        peak_response_maps = visual_cues[3]
                         peak_list = visual_cues[2]
+                        peak_response_maps = visual_cues[3]
                         peak_list[:, 0] = idx
-                        peak_response_maps_list.append(peak_response_maps)
+                        p_list.append([p2, p3, p4])
                         peak_list_list.append(peak_list)
-                        p2_list.append(p2)
-                        p3_list.append(p3)
-                        p4_list.append(p4)
+                        peak_response_maps_list.append(peak_response_maps)
 
                 if len(peak_response_maps_list) == 0:
                     print('trainning pass epoch %d iteration %d' % (epoch + 1, iteration))
                     continue
 
-                peak_response_maps = torch.cat(peak_response_maps_list)
+                p2 = torch.cat([item[0] for item in p_list])
+                p3 = torch.cat([item[1] for item in p_list])
+                p4 = torch.cat([item[2] for item in p_list])
                 peak_list = torch.cat(peak_list_list)
-                p2 = torch.cat(p2_list)
-                p3 = torch.cat(p3_list)
-                p4 = torch.cat(p4_list)
+                peak_response_maps = torch.cat(peak_response_maps_list)
 
                 retrieval_cfg = dict(proposals=proposals, param=(self.balance_factor,))
                 pseudo_gt_mask = self.pseudo_gt_sampling(peak_list, peak_response_maps, retrieval_cfg)
@@ -327,16 +334,18 @@ class Solver(object):
                 p2 = p2.to(self.device)
                 p3 = p3.to(self.device)
                 p4 = p4.to(self.device)
-                peak_response_maps = peak_response_maps.to(self.device)
+                peak_list = peak_list.to(self.device)
                 pseudo_gt_mask = pseudo_gt_mask.to(self.device)
+                peak_response_maps = peak_response_maps.to(self.device)
 
+                # using p2 p3 p4 form feature map
                 _output = self.filling_module(peak_response_maps, peak_list, p2, p3, p4)
 
                 loss = self.filling_module_criterion(_output, pseudo_gt_mask)
 
                 average_loss += loss.item()
                 print('trainning loss at (epoch %d, iteration %d) = %4f' % (
-                    epoch + 1, iteration, average_loss / (iteration + 1)))
+                    epoch + self.filling_epoch_offset + 1, iteration, average_loss / (iteration + 1)))
 
                 self.optimizer_filling.zero_grad()
                 loss.backward()
@@ -349,19 +358,20 @@ class Solver(object):
 
             self.save_checkpoint({'arch': 'iam',
                                   'lr': self.lr,
-                                  'epoch': epoch,
+                                  'epoch': epoch + self.filling_epoch_offset,
                                   'state_dict': self.filling_module.state_dict(),
                                   'error': average_loss},
-                                 self.snapshot, 'model_filling', epoch, 'checkpoint_filling.pth.tar')
+                                 self.snapshot, 'model_filling', epoch + self.filling_epoch_offset,
+                                 'checkpoint_filling.pth.tar')
 
-            print('training %d epoch,loss is %.4f' % (epoch + 1, average_loss))
+            print('training %d epoch,loss is %.4f' % (epoch + self.filling_epoch_offset + 1, average_loss))
             # TO-DO: modify learning rates.
 
         time_elapsed = time.time() - since
         print('train phrase completed in %.0fm %.0fs' % (time_elapsed // 60, time_elapsed % 60))
 
     def dense_crf_2d(self, img, output_probs):
-        # img 为H，*W*C 的原图，output_probs 为 输出概率 sigmoid 输出（h，w），
+        # out 为H，*W*C 的原图，output_probs 为 输出概率 sigmoid 输出（h，w），
         # seg_map - 假设为语义分割的 mask, hxw, np.array 形式.
 
         h = output_probs.shape[0]
@@ -381,14 +391,14 @@ class Solver(object):
         d.setUnaryEnergy(U)
 
         # d.addPairwiseGaussian(sxy=20, compat=3)
-        # d.addPairwiseBilateral(sxy=30, srgb=20, rgbim=img, compat=10)
+        # d.addPairwiseBilateral(sxy=30, srgb=20, rgbim=out, compat=10)
 
         # im is an image-array, e.g. im.dtype == np.uint8 and im.shape == (640,480,3)
         d.addPairwiseGaussian(sxy=3, compat=3)
         d.addPairwiseBilateral(sxy=80, srgb=13, rgbim=img, compat=10)
 
-        # Q = d.inference(5)
-        Q = d.inference(3)
+        Q = d.inference(5)
+        # Q = d.inference(3)
         Q = np.argmax(np.array(Q), axis=0).reshape((h, w))
 
         return Q
@@ -397,17 +407,14 @@ class Solver(object):
         self.restore_prm_model()
         self.restore_filling_model()
 
-        # Visual cue extraction
+        # visual cue extraction
         self.filling_module.eval()
-        # self.filling_module.train()
 
-        peak_response_maps_list = []
-        peak_list_list = []
-        p2_list = []
-        p3_list = []
-        p4_list = []
-        class_response_maps_list = []
+        p_list = []
         aware_list = []
+        peak_list_list = []
+        peak_response_maps_list = []
+        class_response_maps_list = []
         for iteration, (inp, rar_img) in enumerate(test_data_loader):
 
             # self.model.eval()
@@ -420,15 +427,14 @@ class Solver(object):
 
             inp = inp.to(self.device)
 
-            peak_response_maps_list.clear()
-            peak_list_list.clear()
-            p2_list.clear()
-            p3_list.clear()
-            p4_list.clear()
-            class_response_maps_list.clear()
+            p_list.clear()
             aware_list.clear()
+            peak_list_list.clear()
+            peak_response_maps_list.clear()
+            class_response_maps_list.clear()
             for idx in range(inp.size(0)):
                 item = inp[idx].unsqueeze(0)
+
                 return_tuple = self.prm_module(item)
 
                 if return_tuple is None:
@@ -438,39 +444,38 @@ class Solver(object):
                     plt.imshow(img)
                     plt.title('class aware pass')
                     plt.show()
+                    # TODO save
                     continue
                 else:
                     aware_list.append(idx)
                     visual_cues, p2, p3, p4 = return_tuple
                     confidence, class_response_maps, peak_list, peak_response_maps = visual_cues
                     peak_list[:, 0] = idx
-                    peak_response_maps_list.append(peak_response_maps)
+                    p_list.append([p2, p3, p4])
                     peak_list_list.append(peak_list)
-                    p2_list.append(p2)
-                    p3_list.append(p3)
-                    p4_list.append(p4)
+                    peak_response_maps_list.append(peak_response_maps)
                     class_response_maps_list.append(class_response_maps)
 
             if len(aware_list) == 0:
                 print('inference pass')
                 continue
 
-            peak_response_maps = torch.cat(peak_response_maps_list)
+            p2 = torch.cat([item[0] for item in p_list])
+            p3 = torch.cat([item[1] for item in p_list])
+            p4 = torch.cat([item[2] for item in p_list])
             peak_list = torch.cat(peak_list_list)
-            p2 = torch.cat(p2_list)
-            p3 = torch.cat(p3_list)
-            p4 = torch.cat(p4_list)
-            class_response_maps = torch.cat(class_response_maps_list)
+            peak_response_maps = torch.cat(peak_response_maps_list)
 
             p2 = p2.to(self.device)
             p3 = p3.to(self.device)
             p4 = p4.to(self.device)
             peak_response_maps = peak_response_maps.to(self.device)
 
-            instance_activate_maps = self.filling_module(peak_response_maps, peak_list, p2, p3, p4)
+            with torch.no_grad():
+                instance_activate_maps = self.filling_module(peak_response_maps, peak_list, p2, p3, p4)
             instance_activate_maps = instance_activate_maps.detach()
 
-            if visual_cues is None:
+            if len(aware_list) == 0:
                 print('No class peak response detected')
             else:
                 # TODO No class peak save raw_img
@@ -478,16 +483,16 @@ class Solver(object):
                     plt.figure(figsize=(5, 5))
                     class_idx = peak_list[batch_idx, 1]
                     mask = peak_list[:, 0] == batch_idx
-                    num_plots = 2 + mask.sum().item()
+                    num_plots = 2 + mask.sum().item() * 2
                     f, axarr = plt.subplots(1, num_plots, figsize=(num_plots * 4, 4))
                     img = transforms.ToPILImage()(rar_img[batch_idx]).convert('RGB')
                     img = img.resize(size=(self.image_size, self.image_size), resample=Image.BICUBIC)
                     axarr[0].imshow(img)
                     axarr[0].set_title('Image')
                     axarr[0].axis('off')
-                    axarr[1].imshow(class_response_maps[it, class_idx].cpu(), interpolation='bicubic',
+                    axarr[1].imshow(class_response_maps[it, class_idx], interpolation='bicubic',
                                     cmap=plt.cm.gray)
-                    axarr[1].set_title('Class Response Map ("%s")' % self.class_names[class_idx])
+                    axarr[1].set_title('Class Response Map')
                     axarr[1].axis('off')
                     raw_img = np.array(img)
                     raw_img = raw_img.astype(np.uint8)
@@ -495,12 +500,21 @@ class Solver(object):
                             sorted(zip(instance_activate_maps[mask], peak_list[mask]), key=lambda v: v[-1][-1])):
                         iam_img = iam.cpu().numpy()
                         crf_img = self.dense_crf_2d(raw_img, iam_img)
-                        axarr[idx + 2].imshow(crf_img,
-                                              cmap=plt.cm.gray)
-                        axarr[idx + 2].set_title('Instance Activation Map ("%s")' % (self.class_names[peak[1].item()]))
-                        axarr[idx + 2].axis('off')
-                    plt.show()
-                    # TODO save
+                        axarr[2 * idx + 2].imshow(iam_img,
+                                                  cmap=plt.cm.gray)
+                        axarr[2 * idx + 2].set_title(
+                            'Instance Activation Map ("%s")' % (self.class_names[peak[1].item()]))
+                        axarr[2 * idx + 2].axis('off')
+
+                        axarr[2 * idx + 3].imshow(crf_img,
+                                                  cmap=plt.cm.gray)
+                        axarr[2 * idx + 3].set_title(
+                            'Predict ("%s")' % (self.class_names[peak[1].item()]))
+                        axarr[2 * idx + 3].axis('off')
+                    path = os.path.join(self.out_img_path, f"{iteration + 1}_{batch_idx}.jpg")
+                    plt.savefig(path, bbox_inches='tight')
+                    # TODO save predict as real out name
+                    # plt.show()
 
     def validation_prm(self, data_loader):
         self.prm_module.eval()

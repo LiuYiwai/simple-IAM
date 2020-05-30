@@ -7,25 +7,126 @@ A simple implementation as my homework, modified based on [ultra-thin-PRM](https
 
 Implementation details With my own understanding of the paper, it may be different from the author.
 
-This implementation is better when training demos and other data sets with fewer samples, but when I use VOC2012 training, it is not ideal.  :(
-
 If you have any good suggestions, please let me know. Thank you !
 
 
 
-## Update
+## Sample result 
 
-Mar. 24. 2020:
+<img src="./sample/2_0.jpg" alt="1_0" style="zoom:50%;" />
 
-​	Fixed a bug, this bug will cause the filling module to only affect the first PRM.
 
-​	Updated the transform implementation of proposals, data augmentation can now be used in the training filling module.
 
-​	
+<img src="./sample/1_0.jpg" alt="2_0" style="zoom:50%;" />
+
+
+
+<img src="./sample/3_0.jpg" alt="3_0" style="zoom:72%;" />
+
+
+
+ps: Use dense CRF to generate predictions without adjusting the default parameters.
+
+
+
+##  Weights and config
+
+PRM_modules: https://drive.google.com/file/d/1L6czsneapAh_cX-rJpufT8V6wR-LfDxE/view?usp=sharing
+
+Filling_modules: https://drive.google.com/file/d/1abHbPVftdyEP9lgnkx3ps2ok_5poVFtI/view?usp=sharing
+
+config: https://drive.google.com/file/d/14vNYjj3ta8Edo9I3Pb8X16JRrfQ9FHOr/view?usp=sharing
+
+```
+simple-IAM
+    ├── snapshots   
+    │   ├── model_prm_latest.pth.tar
+    │   ├── model_filling_latest.pth.tar
+    │
+    │── config.yml
+```
+
+ps: Due to limitations of my device, the filling process is repeated only 16 times, so the results do not represent the results of the paper.
+
+
+
+##  Run demo
+
+First download the shared weights and configuration and put them in the right place. Create a new directory   ```out```   as the output location. You can also change the folder path by editing ```config.yml```.
+
+```
+python main.py --run_demo=true
+```
+
+
+
+## Train
+
+Datasets：VOC2012
+
+Download the PASCAL-VOC2012 dataset:
+
+```
+wget http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar
+tar xvf VOCtrainval_11-May-2012.tar
+```
+
+Configure ```config.yml``` to determine the location of the dataset.
+
+
+
+Train PRM modules: 
+
+```
+python main.py --train_prm=true
+```
+
+
+
+Train Filling modules: 
+
+Download the proposals of VOC2012.
+
+https://drive.google.com/file/d/1XOMxl89Mp6GzzYy8dBoQhsx04JY3XIU3/view?usp=sharing
+
+Rename directory to ```ImageProposals``` after unzip and put it in the position shown below.
+
+```
+VOC2012
+    ├── Annotations 
+    ├── ImageProposals
+    ├── ImageSets
+    ├── JPEGImages
+    ├── SegmentationClass
+    ├── SegmentationObject
+```
+then:
+```
+python main.py --train_filling=true
+```
+
+
+
+If you want to continue the previous training, these two parameters may be helpful.
+
+```--train_prm_continue=true``` and ```--train_filling_continue=true```
+
+
+
+## Inference
+
+Currently only inferences similar to VOC2012 structure are supported.
+
+Configure ```config.yml``` to determine the location of the test dataset.
+
+```
+python main.py --run_demo=true
+```
 
 
 
 ### Reference
+
 ```markdown
 @article{Zhu2019IAM,
     title={{Learning Instance Activation Maps for Weakly Supervised Instance Segmentation}},

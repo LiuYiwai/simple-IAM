@@ -31,7 +31,7 @@ class PeakStimulation(Function):
             mask = input >= peak_filter(input)
             peak_map = (peak_map & mask)
 
-        peak_list = torch.nonzero(peak_map)
+        peak_list = torch.nonzero(peak_map, as_tuple=False)
 
         ctx.mark_non_differentiable(peak_list)
 

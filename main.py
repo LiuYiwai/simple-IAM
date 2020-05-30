@@ -1,6 +1,7 @@
 import argparse
 
 import yaml
+from numpy.lib._iotools import str2bool
 from tensorboardX import SummaryWriter
 
 from datasets import *
@@ -15,6 +16,9 @@ def main(args):
             print(exc)
 
     train_logger = SummaryWriter(log_dir=os.path.join(config['log'], 'train'), comment='training')
+
+    config['train_prm_continue'] = args.train_prm_continue
+    config['train_filling_continue'] = args.train_filling_continue
 
     solver = Solver(config)
 
@@ -72,13 +76,15 @@ def main(args):
 
 
 if __name__ == "__main__":
-    import warnings
-
-    warnings.filterwarnings("ignore")
-
     parser = argparse.ArgumentParser()
-    parser.add_argument('--train_filling', type=bool, default=False, help='set train filling mode up')
-    parser.add_argument('--train_prm', type=bool, default=False, help='set train prm mode up')
-    parser.add_argument('--run_demo', '-I', type=bool, default=False, help='run demo')
+    parser.add_argument('--train_filling', type=str2bool, default=False,
+                        help='set train filling mode up')
+    parser.add_argument('--train_prm', type=str2bool, default=False,
+                        help='set train prm mode up')
+    parser.add_argument('--train_filling_continue', type=str2bool, default=False,
+                        help='train filling with latest weight')
+    parser.add_argument('--train_prm_continue', type=str2bool, default=False,
+                        help='train prm with latest weight')
+    parser.add_argument('--run_demo', '-I', type=str2bool, default=False, help='run demo')
     args = parser.parse_args()
     main(args)

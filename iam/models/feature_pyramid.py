@@ -57,7 +57,7 @@ class FeaturePyramid(nn.Module):
         So we choose bilinear upsample which supports arbitrary output sizes.
         '''
         _, _, H, W = y.size()
-        return F.interpolate(x, size=(H, W), mode='bilinear') + y
+        return F.interpolate(x, size=(H, W), mode='bilinear', align_corners=True) + y
 
     def forward(self, c2, c3, c4):
         p4 = self.toplayer(c4)

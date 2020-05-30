@@ -64,8 +64,7 @@ class InstanceExtentFilling(nn.Sequential):
         weight_size = weight.size()
         weight_kernel = weight.view(weight.size(0), weight.size(1),
                                     weight.size(2), weight.size(3), -1)
-        weight_kernel_sum = weight_kernel.sum(4)
-        weight_kernel_sum = weight_kernel_sum.unsqueeze(4)
+        weight_kernel_sum = weight_kernel.sum(4, keepdim=True)
         mask = weight_kernel_sum[:, :, :, :] == 0
         weight_kernel_sum[mask] = 1
 
@@ -79,6 +78,7 @@ class InstanceExtentFilling(nn.Sequential):
         batch_num = p2.shape[0]
 
         pyramid = self.feature_pyramid(p2, p3, p4)
+
         weight = pyramid.permute(0, 2, 3, 1)
         weight = weight.view(batch_num, self.H, self.W,
                              self.channel_num, self.kernel, self.kernel)

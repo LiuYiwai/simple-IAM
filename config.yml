@@ -22,7 +22,7 @@ train_dataset:
 test_dataset:
   split: test
   data_dir: ./datasets/TestDemo
-#  split: train
+#  split: test
 #  data_dir: ./datasets/VOCdevkit/VOC2012
 
 train_transform:
@@ -38,9 +38,8 @@ test_transform:
   std: [0.229, 0.224, 0.225]
 
 data_loaders:
-  #  batch_size: 1
-  batch_size: 8
-  #  batch_size: 16
+#  batch_size: 8
+  batch_size: 16
   num_workers: 4
 
 test_data_loaders:
@@ -51,8 +50,8 @@ model:
   win_size: 3
   sub_pixel_locating_factor: 8
   enable_peak_stimulation: true
-  filter_type: mean
-#  filter_type: median
+  #   filter_type: mean
+  filter_type: median
 
 optimizer:
   lr: 0.01
@@ -70,12 +69,9 @@ meters:
 
 
 # filling iterate
-#iterate_num: 16
-iterate_num: 28
-#iterate_num: 112
+iterate_num: 16
 
-encode_channel: 8
-#encode_channel: 32
+encode_channel: 16
 
 filling_kernel: 3
 
@@ -83,12 +79,9 @@ k_proposals: 5
 
 balance_factor: 0.1
 
-#max_epoch: 4
-#max_epoch: 8
-#max_epoch: 16
 max_epoch: 50
 
 log: ./
 
 snapshot: ./snapshots
-
+out_img_path: ./out
