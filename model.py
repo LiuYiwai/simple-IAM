@@ -67,7 +67,9 @@ def peak_response_mapping(
 def instance_extent_filling(config):
     model = InstanceExtentFilling(channel_num=config['encode_channel'],
                                   kernel=config['filling_kernel'],
+                                  use_checkpoints=config['enable_filling_forward_checkpoints'],
                                   iterate_num=config['iterate_num'],
+                                  sub_iterate_num=config['sub_iterate_num'],
                                   image_size=config['image_size'],
                                   )
     return model

@@ -47,8 +47,8 @@ class Solver(object):
         self.params = finetune(self.prm_module, **config['finetune'])
         self.optimizer_prm = sgd_optimizer(self.params, **config['optimizer'])
         # self.optimizer_filling = sgd_optimizer(self.filling_module.parameters(), **config['optimizer'])
-        # self.optimizer_filling = torch.optim.RMSprop(self.filling_module.parameters())
-        self.optimizer_filling = torch.optim.Adam(self.filling_module.parameters())
+        self.optimizer_filling = torch.optim.RMSprop(self.filling_module.parameters(), config['optimizer']['lr'])
+        # self.optimizer_filling = torch.optim.Adam(self.filling_module.parameters())
         # self.optimizer_filling = torch.optim.Adadelta(self.filling_module.parameters())
 
         self.prm_epoch_offset = 0
@@ -318,7 +318,8 @@ class Solver(object):
                         peak_response_maps_list.append(peak_response_maps)
 
                 if len(peak_response_maps_list) == 0:
-                    print('trainning pass epoch %d iteration %d' % (epoch + 1, iteration))
+                    print('trainning pass epoch %d iteration %d' % (epoch + self.filling_epoch_offset + 1,
+                                                                    iteration))
                     continue
 
                 p2 = torch.cat([item[0] for item in p_list])
@@ -511,10 +512,10 @@ class Solver(object):
                         axarr[2 * idx + 3].set_title(
                             'Predict ("%s")' % (self.class_names[peak[1].item()]))
                         axarr[2 * idx + 3].axis('off')
-                    path = os.path.join(self.out_img_path, f"{iteration + 1}_{batch_idx}.jpg")
-                    plt.savefig(path, bbox_inches='tight')
+                    # path = os.path.join(self.out_img_path, f"{iteration + 1}_{batch_idx}.jpg")
+                    # plt.savefig(path, bbox_inches='tight')
                     # TODO save predict as real out name
-                    # plt.show()
+                    plt.show()
 
     def validation_prm(self, data_loader):
         self.prm_module.eval()

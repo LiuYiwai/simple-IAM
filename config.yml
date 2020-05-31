@@ -38,8 +38,7 @@ test_transform:
   std: [0.229, 0.224, 0.225]
 
 data_loaders:
-#  batch_size: 8
-  batch_size: 16
+  batch_size: 8
   num_workers: 4
 
 test_data_loaders:
@@ -69,7 +68,9 @@ meters:
 
 
 # filling iterate
-iterate_num: 16
+enable_filling_forward_checkpoints: true
+iterate_num: 112
+sub_iterate_num: 16
 
 encode_channel: 16
 
