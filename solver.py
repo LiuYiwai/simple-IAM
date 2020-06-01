@@ -512,10 +512,10 @@ class Solver(object):
                         axarr[2 * idx + 3].set_title(
                             'Predict ("%s")' % (self.class_names[peak[1].item()]))
                         axarr[2 * idx + 3].axis('off')
-                    # path = os.path.join(self.out_img_path, f"{iteration + 1}_{batch_idx}.jpg")
-                    # plt.savefig(path, bbox_inches='tight')
+                    path = os.path.join(self.out_img_path, f"{iteration + 1}_{batch_idx}.jpg")
+                    plt.savefig(path, bbox_inches='tight')
                     # TODO save predict as real out name
-                    plt.show()
+                    # plt.show()
 
     def validation_prm(self, data_loader):
         self.prm_module.eval()
