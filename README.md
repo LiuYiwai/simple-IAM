@@ -13,17 +13,19 @@ If you have any good suggestions, please let me know. Thank you !
 
 ## Sample result 
 
-<img src="./sample/2_0.jpg" alt="1_0" style="zoom:50%;" />
+<img src="./sample/sample1.jpg" alt="1_0" style="zoom:50%;" />
 
 
 
-<img src="./sample/1_0.jpg" alt="2_0" style="zoom:50%;" />
+<img src="./sample/sample2.jpg" alt="2_0" style="zoom:50%;" />
 
 
 
-<img src="./sample/3_0.jpg" alt="3_0" style="zoom:72%;" />
+<img src="./sample/sample3.jpg" alt="3_0" style="zoom:72%;" />
 
 
+
+<img src="./sample/sample4.jpg" alt="3_0" style="zoom:72%;" />
 
 ps: Use dense CRF to generate predictions without adjusting the default parameters.
 
@@ -46,8 +48,6 @@ simple-IAM
     │── config.yml
 ```
 
-ps: Due to limitations of my device, the filling process is repeated only 16 times, so the results do not represent the results of the paper.
-
 
 
 ##  Run demo
@@ -62,7 +62,7 @@ python main.py --run_demo=true
 
 ## Train
 
-Datasets：VOC2012
+Dataset：VOC2012
 
 Download the PASCAL-VOC2012 dataset:
 
@@ -109,7 +109,7 @@ python main.py --train_filling=true
 
 If you want to continue the previous training, these two parameters may be helpful.
 
-```--train_prm_continue=true``` and ```--train_filling_continue=true```
+```--train_prm_resume=true``` and ```--train_filling_resume=true```
 
 
 
@@ -130,8 +130,8 @@ python main.py --run_demo=true
 ```markdown
 @article{Zhu2019IAM,
     title={{Learning Instance Activation Maps for Weakly Supervised Instance Segmentation}},
-    author = {Zhu, Y. and Zhou, Y. and Xu, H. and Ye, Q. and Doermann, D. and Jiao, J.},
-    booktitle = {CVPR},
-    year = {2019}
+    author={Zhu, Y. and Zhou, Y. and Xu, H. and Ye, Q. and Doermann, D. and Jiao, J.},
+    booktitle={CVPR},
+    year={2019}
 }
 ```

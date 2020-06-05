@@ -22,7 +22,7 @@ train_dataset:
 test_dataset:
   split: test
   data_dir: ./datasets/TestDemo
-#  split: test
+#  split: val
 #  data_dir: ./datasets/VOCdevkit/VOC2012
 
 train_transform:
@@ -53,14 +53,14 @@ model:
   filter_type: median
 
 optimizer:
-  lr: 0.01
+  lr: 0.001
   momentum: 0.9
   weight_decay: 1.0e-4
 
 finetune:
-  base_lr: 0.01
+  base_lr: 0.001
   groups:
-    'features': 0.01
+    'features': 0.001
 
 meters:
   loss:

@@ -47,14 +47,12 @@ class Solver(object):
         self.params = finetune(self.prm_module, **config['finetune'])
         self.optimizer_prm = sgd_optimizer(self.params, **config['optimizer'])
         # self.optimizer_filling = sgd_optimizer(self.filling_module.parameters(), **config['optimizer'])
-        self.optimizer_filling = torch.optim.RMSprop(self.filling_module.parameters(), config['optimizer']['lr'])
-        # self.optimizer_filling = torch.optim.Adam(self.filling_module.parameters())
-        # self.optimizer_filling = torch.optim.Adadelta(self.filling_module.parameters())
+        self.optimizer_filling = torch.optim.Adam(self.filling_module.parameters(), lr=config['optimizer']['lr'])
 
         self.prm_epoch_offset = 0
         self.filling_epoch_offset = 0
-        self.train_prm_continue = config['train_prm_continue']
-        self.train_filling_continue = config['train_filling_continue']
+        self.train_prm_resume = config['train_prm_resume']
+        self.train_filling_resume = config['train_filling_resume']
 
         self.lr_update_step = 999999
         self.lr = config['optimizer']['lr']
@@ -215,7 +213,7 @@ class Solver(object):
         return pseudo_gt_mask
 
     def train_prm(self, train_data_loader, train_logger, val_data_loader=None, val_logger=None):
-        if self.train_prm_continue:
+        if self.train_prm_resume:
             self.restore_prm_model()
         # Start training.
         print('Start training prm...')
@@ -280,7 +278,7 @@ class Solver(object):
         print('train phrase completed in %.0fm %.0fs' % (time_elapsed // 60, time_elapsed % 60))
 
     def train_filling(self, train_data_loader, train_logger, val_data_loader=None, val_logger=None):
-        if self.train_filling_continue:
+        if self.train_filling_resume:
             self.restore_filling_model()
         # Start training.
         self.restore_prm_model()
@@ -391,15 +389,11 @@ class Solver(object):
 
         d.setUnaryEnergy(U)
 
-        # d.addPairwiseGaussian(sxy=20, compat=3)
-        # d.addPairwiseBilateral(sxy=30, srgb=20, rgbim=out, compat=10)
-
         # im is an image-array, e.g. im.dtype == np.uint8 and im.shape == (640,480,3)
         d.addPairwiseGaussian(sxy=3, compat=3)
         d.addPairwiseBilateral(sxy=80, srgb=13, rgbim=img, compat=10)
 
         Q = d.inference(5)
-        # Q = d.inference(3)
         Q = np.argmax(np.array(Q), axis=0).reshape((h, w))
 
         return Q
@@ -508,7 +502,8 @@ class Solver(object):
                         axarr[2 * idx + 2].axis('off')
 
                         axarr[2 * idx + 3].imshow(crf_img,
-                                                  cmap=plt.cm.gray)
+                                                  cmap=plt.cm.gray,
+                                                  )
                         axarr[2 * idx + 3].set_title(
                             'Predict ("%s")' % (self.class_names[peak[1].item()]))
                         axarr[2 * idx + 3].axis('off')
