@@ -438,7 +438,8 @@ class Solver(object):
                     img = img.resize(size=(self.image_size, self.image_size), resample=Image.BICUBIC)
                     plt.imshow(img)
                     plt.title('class aware pass')
-                    plt.show()
+                    # plt.show()
+                    plt.close('all')
                     # TODO save
                     continue
                 else:
@@ -460,6 +461,7 @@ class Solver(object):
             p4 = torch.cat([item[2] for item in p_list])
             peak_list = torch.cat(peak_list_list)
             peak_response_maps = torch.cat(peak_response_maps_list)
+            class_response_maps = torch.cat(class_response_maps_list)
 
             p2 = p2.to(self.device)
             p3 = p3.to(self.device)
@@ -476,41 +478,42 @@ class Solver(object):
                 # TODO No class peak save raw_img
                 for it, batch_idx in enumerate(aware_list):
                     plt.figure(figsize=(5, 5))
-                    class_idx = peak_list[batch_idx, 1]
+                    class_idx = peak_list[it, 1]
                     mask = peak_list[:, 0] == batch_idx
                     num_plots = 2 + mask.sum().item() * 2
-                    f, axarr = plt.subplots(1, num_plots, figsize=(num_plots * 4, 4))
+                    f, axarr = plt.subplots(1, num_plots, figsize=(num_plots * 4, 4), squeeze=False)
                     img = transforms.ToPILImage()(rar_img[batch_idx]).convert('RGB')
                     img = img.resize(size=(self.image_size, self.image_size), resample=Image.BICUBIC)
-                    axarr[0].imshow(img)
-                    axarr[0].set_title('Image')
-                    axarr[0].axis('off')
-                    axarr[1].imshow(class_response_maps[it, class_idx], interpolation='bicubic',
-                                    cmap=plt.cm.gray)
-                    axarr[1].set_title('Class Response Map')
-                    axarr[1].axis('off')
+                    axarr[0][0].imshow(img)
+                    axarr[0][0].set_title('Image')
+                    axarr[0][0].axis('off')
+                    axarr[0][1].imshow(class_response_maps[it, class_idx], interpolation='bicubic',
+                                       cmap=plt.cm.gray)
+                    axarr[0][1].set_title('Class Response Map')
+                    axarr[0][1].axis('off')
                     raw_img = np.array(img)
                     raw_img = raw_img.astype(np.uint8)
                     for idx, (iam, peak) in enumerate(
                             sorted(zip(instance_activate_maps[mask], peak_list[mask]), key=lambda v: v[-1][-1])):
                         iam_img = iam.cpu().numpy()
                         crf_img = self.dense_crf_2d(raw_img, iam_img)
-                        axarr[2 * idx + 2].imshow(iam_img,
-                                                  cmap=plt.cm.gray)
-                        axarr[2 * idx + 2].set_title(
+                        axarr[0][2 * idx + 2].imshow(iam_img,
+                                                     cmap=plt.cm.gray)
+                        axarr[0][2 * idx + 2].set_title(
                             'Instance Activation Map ("%s")' % (self.class_names[peak[1].item()]))
-                        axarr[2 * idx + 2].axis('off')
+                        axarr[0][2 * idx + 2].axis('off')
 
-                        axarr[2 * idx + 3].imshow(crf_img,
-                                                  cmap=plt.cm.gray,
-                                                  )
-                        axarr[2 * idx + 3].set_title(
+                        axarr[0][2 * idx + 3].imshow(crf_img,
+                                                     cmap=plt.cm.gray,
+                                                     )
+                        axarr[0][2 * idx + 3].set_title(
                             'Predict ("%s")' % (self.class_names[peak[1].item()]))
-                        axarr[2 * idx + 3].axis('off')
+                        axarr[0][2 * idx + 3].axis('off')
                     path = os.path.join(self.out_img_path, f"{iteration + 1}_{batch_idx}.jpg")
                     plt.savefig(path, bbox_inches='tight')
                     # TODO save predict as real out name
                     # plt.show()
+                    plt.close('all')
 
     def validation_prm(self, data_loader):
         self.prm_module.eval()
