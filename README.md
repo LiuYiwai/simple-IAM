@@ -1,5 +1,5 @@
 # simple-IAM
-A simple PyTorch implementation of Learning Instance Activation Maps for Weakly Supervised Instance Segmentation, in CVPR 2019 (Spotlight)
+A simple PyTorch implementation of Learning Instance Activation Maps for Weakly Supervised Instance Segmentation, in CVPR 2019
 
 
 
